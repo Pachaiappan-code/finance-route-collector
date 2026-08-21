@@ -54,6 +54,7 @@ npm run build    # production build + typecheck
 Web app (Phases 0–8 of the spec) is implemented and verified end-to-end in
 a real browser: auth, routes, customers, collection schedules, the
 Paid/Due/Partial collection-mode screen, next-cycle generation, payment
-promises + reminders, due list, reports, CSV export, settings. Offline
-support (Phase 9) and the Android app (Phase 9/52) are not yet built —
-see the docs above for what's designed but not implemented.
+promises + reminders, due list, reports, CSV export, settings. Deployed to
+Vercel production, verified with a real login + database round trip.
+Offline support (Phase 9) and the Android app (Phase 9/52) are not yet
+built — see the docs above for what's designed but not implemented.

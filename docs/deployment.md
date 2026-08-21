@@ -27,6 +27,21 @@ npx vercel --token=$VERCEL_TOKEN --prod
 https://vercel.com/account/tokens — export it in your shell, never commit
 it, never put it in `.env.example` with a real value.
 
+### Two gotchas hit during this project's initial deploy
+
+1. **Framework Preset was `null`** on the auto-created project (created by
+   Vercel's GitHub App import before it detected Next.js), so builds used
+   the generic static builder and every route 404'd despite `READY`
+   status. Fixed by setting Framework Preset to Next.js — see
+   [troubleshooting.md](./troubleshooting.md) for the exact symptom/fix.
+2. **Deployment Protection (SSO)** was on by default, blocking public
+   access to `.vercel.app` production URLs. Disabled after explicit
+   confirmation, since it's an access-control change — see
+   [troubleshooting.md](./troubleshooting.md).
+
+If you ever recreate this project from scratch via GitHub import, check
+both settings before assuming the first deploy will actually be reachable.
+
 ### Verifying a deploy
 
 After deploy, confirm:
