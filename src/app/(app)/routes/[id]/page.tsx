@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { and, eq } from "drizzle-orm";
+import { PlayCircle } from "lucide-react";
 import { auth } from "@/lib/auth/config";
 import { db } from "@/lib/db";
 import { customers } from "@/lib/db/schema";
@@ -25,26 +26,28 @@ export default async function RouteDetailPage({
     .orderBy(customers.routeSequence);
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-4 p-4 pt-5">
       <div>
-        <p className="text-sm text-zinc-500">{dayOfWeekName(route.dayOfWeek)}</p>
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <p className="text-sm font-medium text-brand-navy dark:text-brand-navy-strong">
+          {dayOfWeekName(route.dayOfWeek)}
+        </p>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           {route.name}
         </h1>
         {route.description && (
-          <p className="mt-1 text-sm text-zinc-500">{route.description}</p>
+          <p className="mt-1 text-sm text-muted">{route.description}</p>
         )}
       </div>
 
       <Link
         href={`/collections/${route.id}`}
-        className="h-12 rounded-lg bg-zinc-900 px-4 text-base font-medium text-white flex items-center justify-center dark:bg-zinc-100 dark:text-zinc-900"
+        className="flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 text-base font-medium text-white shadow-sm dark:bg-brand-navy-strong"
       >
-        Start today&apos;s collection
+        <PlayCircle size={18} /> Start today&apos;s collection
       </Link>
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-zinc-500">
+        <h2 className="mb-2 text-sm font-medium text-muted">
           Customers ({routeCustomers.length})
         </h2>
         <div className="flex flex-col gap-2">
@@ -52,13 +55,13 @@ export default async function RouteDetailPage({
             <Link
               key={c.id}
               href={`/customers/${c.id}`}
-              className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
+              className="flex items-center justify-between rounded-2xl border border-border bg-surface p-4"
             >
               <div>
-                <p className="font-medium text-zinc-900 dark:text-zinc-50">{c.name}</p>
-                <p className="text-xs text-zinc-500">{c.customerCode} · {c.phone}</p>
+                <p className="font-medium text-foreground">{c.name}</p>
+                <p className="text-xs text-muted">{c.customerCode} · {c.phone}</p>
               </div>
-              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              <p className="text-sm font-semibold text-foreground">
                 {formatCurrency(Number(c.outstandingAmount))}
               </p>
             </Link>

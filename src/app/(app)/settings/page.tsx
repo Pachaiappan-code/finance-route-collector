@@ -1,8 +1,14 @@
 import { eq } from "drizzle-orm";
+import { LogOut } from "lucide-react";
 import { auth, signOut } from "@/lib/auth/config";
 import { db } from "@/lib/db";
 import { businesses } from "@/lib/db/schema";
+import { ThemeSettingsControl } from "@/components/theme-settings-control";
 import { updateBusinessSettings } from "./actions";
+
+const inputClass =
+  "h-12 rounded-xl border border-border bg-background px-3.5 text-base text-foreground outline-none transition-colors focus:border-brand-navy dark:focus:border-brand-navy-strong";
+const labelClass = "text-sm font-medium text-foreground";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -13,84 +19,90 @@ export default async function SettingsPage() {
     .limit(1);
 
   return (
-    <div className="flex flex-col gap-6 p-4">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Settings</h1>
+    <div className="flex flex-col gap-7 p-4 pt-5">
+      <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
 
-      <form action={updateBusinessSettings} className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="name" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Business name
-          </label>
-          <input
-            id="name"
-            name="name"
-            defaultValue={business?.name}
-            className="h-12 rounded-lg border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="currency" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Currency
-          </label>
-          <input
-            id="currency"
-            name="currency"
-            defaultValue={business?.currency}
-            className="h-12 rounded-lg border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="timezone" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Timezone
-          </label>
-          <input
-            id="timezone"
-            name="timezone"
-            defaultValue={business?.timezone}
-            className="h-12 rounded-lg border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="defaultReminderMinutesBefore"
-            className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+      <section>
+        <h2 className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
+          Appearance
+        </h2>
+        <ThemeSettingsControl />
+      </section>
+
+      <section>
+        <h2 className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
+          Business
+        </h2>
+        <form action={updateBusinessSettings} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="name" className={labelClass}>
+              Business name
+            </label>
+            <input
+              id="name"
+              name="name"
+              defaultValue={business?.name}
+              className={inputClass}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="currency" className={labelClass}>
+              Currency
+            </label>
+            <input
+              id="currency"
+              name="currency"
+              defaultValue={business?.currency}
+              className={inputClass}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="timezone" className={labelClass}>
+              Timezone
+            </label>
+            <input
+              id="timezone"
+              name="timezone"
+              defaultValue={business?.timezone}
+              className={inputClass}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="defaultReminderMinutesBefore" className={labelClass}>
+              Default reminder (minutes before)
+            </label>
+            <input
+              id="defaultReminderMinutesBefore"
+              name="defaultReminderMinutesBefore"
+              type="number"
+              defaultValue={business?.defaultReminderMinutesBefore}
+              className={inputClass}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="defaultPaymentMethod" className={labelClass}>
+              Default payment method
+            </label>
+            <select
+              id="defaultPaymentMethod"
+              name="defaultPaymentMethod"
+              defaultValue={business?.defaultPaymentMethod}
+              className={inputClass}
+            >
+              <option value="cash">Cash</option>
+              <option value="upi">UPI</option>
+              <option value="bank_transfer">Bank transfer</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="h-12 rounded-xl bg-brand-navy text-base font-medium text-white shadow-sm dark:bg-brand-navy-strong"
           >
-            Default reminder (minutes before)
-          </label>
-          <input
-            id="defaultReminderMinutesBefore"
-            name="defaultReminderMinutesBefore"
-            type="number"
-            defaultValue={business?.defaultReminderMinutesBefore}
-            className="h-12 rounded-lg border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="defaultPaymentMethod"
-            className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-          >
-            Default payment method
-          </label>
-          <select
-            id="defaultPaymentMethod"
-            name="defaultPaymentMethod"
-            defaultValue={business?.defaultPaymentMethod}
-            className="h-12 rounded-lg border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            <option value="cash">Cash</option>
-            <option value="upi">UPI</option>
-            <option value="bank_transfer">Bank transfer</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        <button
-          type="submit"
-          className="h-12 rounded-lg bg-zinc-900 text-base font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          Save settings
-        </button>
-      </form>
+            Save settings
+          </button>
+        </form>
+      </section>
 
       <form
         action={async () => {
@@ -98,8 +110,8 @@ export default async function SettingsPage() {
           await signOut({ redirectTo: "/login" });
         }}
       >
-        <button className="h-12 w-full rounded-lg border border-red-300 text-base font-medium text-red-600 dark:border-red-900">
-          Sign out
+        <button className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-danger/30 text-base font-medium text-danger">
+          <LogOut size={16} /> Sign out
         </button>
       </form>
     </div>

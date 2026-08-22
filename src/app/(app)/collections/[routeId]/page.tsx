@@ -20,11 +20,11 @@ export default async function RouteCollectionPage({
 
   return (
     <div className="flex flex-col">
-      <div className="p-4 pb-0">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+      <div className="p-4 pb-0 pt-5">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           {route.name}
         </h1>
-        <p className="text-sm text-zinc-500">{dateStr}</p>
+        <p className="text-sm text-muted">{dateStr}</p>
       </div>
       <CollectionRouteView schedules={schedules} />
     </div>

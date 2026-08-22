@@ -1,6 +1,9 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { auth, signOut } from "@/lib/auth/config";
 import { BottomNav } from "@/components/bottom-nav";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function AppLayout({
   children,
@@ -13,21 +16,42 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-black">
-      <header className="flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-zinc-950">
-        <span className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-          EMF Collections
-        </span>
-        <form
-          action={async () => {
-            "use server";
-            await signOut({ redirectTo: "/login" });
-          }}
-        >
-          <button className="text-sm font-medium text-zinc-500">Sign out</button>
-        </form>
+    <div className="flex min-h-screen flex-col bg-background">
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-surface/90 px-4 backdrop-blur-lg">
+        <div className="flex items-center gap-2.5">
+          <Image
+            src="/logo-icon.png"
+            alt="EMF"
+            width={34}
+            height={34}
+            className="rounded-full"
+            priority
+          />
+          <div className="leading-tight">
+            <p className="text-sm font-semibold tracking-tight text-foreground">
+              EMF Collections
+            </p>
+            <p className="text-[11px] text-muted">Easwar Finance</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <form
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/login" });
+            }}
+          >
+            <button
+              aria-label="Sign out"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-muted transition-colors hover:text-danger"
+            >
+              <LogOut size={16} />
+            </button>
+          </form>
+        </div>
       </header>
-      <main className="flex-1 pb-20">{children}</main>
+      <main className="flex-1 pb-24">{children}</main>
       <BottomNav />
     </div>
   );

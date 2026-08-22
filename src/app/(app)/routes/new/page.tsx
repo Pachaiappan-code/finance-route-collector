@@ -17,34 +17,28 @@ async function action(formData: FormData) {
   redirect("/routes");
 }
 
+const inputClass =
+  "h-12 rounded-xl border border-border bg-background px-3.5 text-base text-foreground outline-none transition-colors focus:border-brand-navy dark:focus:border-brand-navy-strong";
+const labelClass = "text-sm font-medium text-foreground";
+
 export default function NewRoutePage() {
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+    <div className="flex flex-col gap-4 p-4 pt-5">
+      <h1 className="text-2xl font-semibold tracking-tight text-foreground">
         New route
       </h1>
       <form action={action} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="name" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          <label htmlFor="name" className={labelClass}>
             Route name
           </label>
-          <input
-            id="name"
-            name="name"
-            required
-            className="h-12 rounded-lg border border-zinc-300 px-3 text-base outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900"
-          />
+          <input id="name" name="name" required className={inputClass} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="dayOfWeek" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          <label htmlFor="dayOfWeek" className={labelClass}>
             Day of week
           </label>
-          <select
-            id="dayOfWeek"
-            name="dayOfWeek"
-            required
-            className="h-12 rounded-lg border border-zinc-300 px-3 text-base outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900"
-          >
+          <select id="dayOfWeek" name="dayOfWeek" required className={inputClass}>
             {DAYS.map((day, index) => (
               <option key={day} value={index}>
                 {day}
@@ -53,7 +47,7 @@ export default function NewRoutePage() {
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="routeOrder" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          <label htmlFor="routeOrder" className={labelClass}>
             Route order
           </label>
           <input
@@ -61,23 +55,23 @@ export default function NewRoutePage() {
             name="routeOrder"
             type="number"
             defaultValue={0}
-            className="h-12 rounded-lg border border-zinc-300 px-3 text-base outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900"
+            className={inputClass}
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="description" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          <label htmlFor="description" className={labelClass}>
             Description (optional)
           </label>
           <textarea
             id="description"
             name="description"
             rows={3}
-            className="rounded-lg border border-zinc-300 p-3 text-base outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900"
+            className="rounded-xl border border-border bg-background p-3.5 text-base text-foreground outline-none transition-colors focus:border-brand-navy dark:focus:border-brand-navy-strong"
           />
         </div>
         <button
           type="submit"
-          className="h-12 rounded-lg bg-zinc-900 text-base font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+          className="h-12 rounded-xl bg-brand-navy text-base font-medium text-white shadow-sm dark:bg-brand-navy-strong"
         >
           Create route
         </button>

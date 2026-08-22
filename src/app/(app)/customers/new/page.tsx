@@ -3,6 +3,10 @@ import { listActiveRoutesForSelect } from "@/lib/db/queries/customers";
 import { dayOfWeekName } from "@/lib/calculations/cycle";
 import { createCustomer } from "../actions";
 
+const inputClass =
+  "h-12 rounded-xl border border-border bg-background px-3.5 text-base text-foreground outline-none transition-colors focus:border-brand-navy dark:focus:border-brand-navy-strong";
+const labelClass = "text-sm font-medium text-foreground";
+
 export default async function NewCustomerPage() {
   const session = await auth();
   const routes = await listActiveRoutesForSelect(session!.user.businessId);
@@ -10,20 +14,22 @@ export default async function NewCustomerPage() {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+    <div className="flex flex-col gap-4 p-4 pt-5">
+      <h1 className="text-2xl font-semibold tracking-tight text-foreground">
         New customer
       </h1>
 
       {routes.length === 0 && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        <p className="rounded-xl bg-warning-soft px-3.5 py-2.5 text-sm font-medium text-warning">
           Create a route first before adding customers.
         </p>
       )}
 
-      <form action={createCustomer} className="flex flex-col gap-6">
+      <form action={createCustomer} className="flex flex-col gap-7">
         <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1 text-sm font-medium text-zinc-500">Basic information</legend>
+          <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+            Basic information
+          </legend>
           <Field label="Full name" name="name" required />
           <Field label="Mobile" name="phone" required type="tel" />
           <Field label="Alternative mobile" name="alternatePhone" type="tel" />
@@ -32,9 +38,11 @@ export default async function NewCustomerPage() {
         </fieldset>
 
         <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1 text-sm font-medium text-zinc-500">Route</legend>
+          <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+            Route
+          </legend>
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="routeId" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <label htmlFor="routeId" className={labelClass}>
               Route
             </label>
             <select
@@ -42,7 +50,7 @@ export default async function NewCustomerPage() {
               name="routeId"
               required
               disabled={routes.length === 0}
-              className="h-12 rounded-lg border border-zinc-300 px-3 text-base outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900"
+              className={inputClass}
             >
               {routes.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -55,7 +63,9 @@ export default async function NewCustomerPage() {
         </fieldset>
 
         <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1 text-sm font-medium text-zinc-500">Finance</legend>
+          <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+            Finance
+          </legend>
           <Field label="Principal amount" name="principalAmount" type="number" step="0.01" defaultValue="0" />
           <Field label="Interest amount" name="interestAmount" type="number" step="0.01" defaultValue="0" />
           <Field label="Total repayment amount" name="totalRepaymentAmount" type="number" step="0.01" defaultValue="0" />
@@ -63,20 +73,24 @@ export default async function NewCustomerPage() {
         </fieldset>
 
         <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1 text-sm font-medium text-zinc-500">Cycle</legend>
+          <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+            Cycle
+          </legend>
           <Field label="Cycle length (days)" name="cycleDays" type="number" defaultValue="7" required />
           <Field label="Start date" name="startDate" type="date" defaultValue={today} required />
         </fieldset>
 
         <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1 text-sm font-medium text-zinc-500">Notes</legend>
+          <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+            Notes
+          </legend>
           <Field label="Notes" name="notes" textarea />
         </fieldset>
 
         <button
           type="submit"
           disabled={routes.length === 0}
-          className="h-12 rounded-lg bg-zinc-900 text-base font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+          className="h-12 rounded-xl bg-brand-navy text-base font-medium text-white shadow-sm disabled:opacity-40 dark:bg-brand-navy-strong"
         >
           Save customer
         </button>
@@ -104,7 +118,7 @@ function Field({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={name} className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+      <label htmlFor={name} className={labelClass}>
         {label}
       </label>
       {textarea ? (
@@ -113,7 +127,7 @@ function Field({
           name={name}
           rows={2}
           defaultValue={defaultValue}
-          className="rounded-lg border border-zinc-300 p-3 text-base outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900"
+          className="rounded-xl border border-border bg-background p-3.5 text-base text-foreground outline-none transition-colors focus:border-brand-navy dark:focus:border-brand-navy-strong"
         />
       ) : (
         <input
@@ -123,7 +137,7 @@ function Field({
           step={step}
           required={required}
           defaultValue={defaultValue}
-          className="h-12 rounded-lg border border-zinc-300 px-3 text-base outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900"
+          className={inputClass}
         />
       )}
     </div>

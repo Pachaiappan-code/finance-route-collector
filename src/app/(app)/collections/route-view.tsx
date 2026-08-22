@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { CheckCircle2, Clock, Phone, Split } from "lucide-react";
 import { recordDue, recordPayment } from "./actions";
 import { formatCurrency } from "@/lib/utils/format";
 
@@ -18,14 +19,23 @@ type ScheduleRow = {
 };
 
 const STATUS_STYLE: Record<string, string> = {
-  pending: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  paid: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  partial: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  due: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
-  rescheduled: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  cancelled: "bg-zinc-100 text-zinc-400 dark:bg-zinc-800",
-  overdue: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+  pending: "bg-border/60 text-muted",
+  paid: "bg-success-soft text-success",
+  partial: "bg-warning-soft text-warning",
+  due: "bg-danger-soft text-danger",
+  rescheduled: "bg-info-soft text-info",
+  cancelled: "bg-border/60 text-muted",
+  overdue: "bg-danger-soft text-danger",
 };
+
+function initials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n) => n[0]?.toUpperCase())
+    .join("");
+}
 
 function nowTime() {
   const d = new Date();
@@ -88,7 +98,7 @@ export function CollectionRouteView({ schedules }: { schedules: ScheduleRow[] })
   return (
     <div className="flex flex-col gap-3 p-4">
       {schedules.length === 0 && (
-        <p className="text-sm text-zinc-500">No customers scheduled for this route today.</p>
+        <p className="text-sm text-muted">No customers scheduled for this route today.</p>
       )}
       {schedules.map((s) => {
         const isOpen = openCard === s.scheduleId;
@@ -100,23 +110,29 @@ export function CollectionRouteView({ schedules }: { schedules: ScheduleRow[] })
             }}
             data-testid="schedule-card"
             data-customer-name={s.customerName}
-            className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
+            className="rounded-2xl border border-border bg-surface p-4 transition-shadow"
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-zinc-900 dark:text-zinc-50">
-                  {s.customerName}
-                </p>
-                <a href={`tel:${s.customerPhone}`} className="text-xs text-zinc-500">
-                  {s.customerPhone}
-                </a>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-info-soft text-sm font-semibold text-info">
+                  {initials(s.customerName)}
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">{s.customerName}</p>
+                  <a
+                    href={`tel:${s.customerPhone}`}
+                    className="flex items-center gap-1 text-xs text-muted"
+                  >
+                    <Phone size={11} /> {s.customerPhone}
+                  </a>
+                </div>
               </div>
               <div className="text-right">
-                <p className="font-semibold text-zinc-900 dark:text-zinc-50">
+                <p className="font-semibold text-foreground">
                   {formatCurrency(Number(s.expectedAmount))}
                 </p>
                 <span
-                  className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[s.status]}`}
+                  className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${STATUS_STYLE[s.status]}`}
                 >
                   {s.status}
                 </span>
@@ -124,13 +140,13 @@ export function CollectionRouteView({ schedules }: { schedules: ScheduleRow[] })
             </div>
 
             {s.status === "pending" && (
-              <div className="mt-3 grid grid-cols-3 gap-2">
+              <div className="mt-3.5 grid grid-cols-3 gap-2">
                 <button
                   disabled={isPending}
                   onClick={() => submitPayment(s, Number(s.expectedAmount))}
-                  className="h-11 rounded-lg bg-emerald-600 text-sm font-semibold text-white active:scale-[0.98] disabled:opacity-50"
+                  className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-success text-sm font-semibold text-white shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
                 >
-                  PAID
+                  <CheckCircle2 size={16} /> Paid
                 </button>
                 <button
                   disabled={isPending}
@@ -138,9 +154,9 @@ export function CollectionRouteView({ schedules }: { schedules: ScheduleRow[] })
                     setOpenCard(s.scheduleId);
                     setOpenAction("due");
                   }}
-                  className="h-11 rounded-lg bg-red-600 text-sm font-semibold text-white active:scale-[0.98] disabled:opacity-50"
+                  className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-danger text-sm font-semibold text-white shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
                 >
-                  DUE
+                  <Clock size={16} /> Due
                 </button>
                 <button
                   disabled={isPending}
@@ -148,9 +164,9 @@ export function CollectionRouteView({ schedules }: { schedules: ScheduleRow[] })
                     setOpenCard(s.scheduleId);
                     setOpenAction("partial");
                   }}
-                  className="h-11 rounded-lg bg-amber-500 text-sm font-semibold text-white active:scale-[0.98] disabled:opacity-50"
+                  className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-warning text-sm font-semibold text-white shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
                 >
-                  PARTIAL
+                  <Split size={16} /> Partial
                 </button>
               </div>
             )}
@@ -164,9 +180,9 @@ export function CollectionRouteView({ schedules }: { schedules: ScheduleRow[] })
                   );
                   submitPayment(s, amount);
                 }}
-                className="mt-3 flex flex-col gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800"
+                className="mt-3.5 flex flex-col gap-2 border-t border-border pt-3.5"
               >
-                <label className="text-xs font-medium text-zinc-500">Amount paid</label>
+                <label className="text-xs font-medium text-muted">Amount paid</label>
                 <input
                   name="amount"
                   type="number"
@@ -174,19 +190,19 @@ export function CollectionRouteView({ schedules }: { schedules: ScheduleRow[] })
                   max={s.expectedAmount}
                   required
                   autoFocus
-                  className="h-11 rounded-lg border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-900"
+                  className="h-11 rounded-xl border border-border bg-background px-3 text-foreground outline-none focus:border-brand-navy dark:focus:border-brand-navy-strong"
                 />
                 <div className="flex gap-2">
                   <button
                     type="submit"
-                    className="h-10 flex-1 rounded-lg bg-zinc-900 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    className="h-10 flex-1 rounded-xl bg-brand-navy text-sm font-medium text-white dark:bg-brand-navy-strong"
                   >
                     Save
                   </button>
                   <button
                     type="button"
                     onClick={() => setOpenCard(null)}
-                    className="h-10 flex-1 rounded-lg border border-zinc-300 text-sm font-medium dark:border-zinc-700"
+                    className="h-10 flex-1 rounded-xl border border-border text-sm font-medium text-foreground"
                   >
                     Cancel
                   </button>
@@ -200,25 +216,25 @@ export function CollectionRouteView({ schedules }: { schedules: ScheduleRow[] })
                   e.preventDefault();
                   submitDue(s, e.currentTarget);
                 }}
-                className="mt-3 flex flex-col gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800"
+                className="mt-3.5 flex flex-col gap-2 border-t border-border pt-3.5"
               >
-                <label className="text-xs font-medium text-zinc-500">Promised date</label>
+                <label className="text-xs font-medium text-muted">Promised date</label>
                 <input
                   name="promisedDate"
                   type="date"
                   required
                   autoFocus
                   min={todayDate()}
-                  className="h-11 rounded-lg border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-900"
+                  className="h-11 rounded-xl border border-border bg-background px-3 text-foreground outline-none focus:border-brand-navy dark:focus:border-brand-navy-strong"
                 />
-                <label className="text-xs font-medium text-zinc-500">Promised time</label>
+                <label className="text-xs font-medium text-muted">Promised time</label>
                 <input
                   name="promisedTime"
                   type="time"
                   required
-                  className="h-11 rounded-lg border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-900"
+                  className="h-11 rounded-xl border border-border bg-background px-3 text-foreground outline-none focus:border-brand-navy dark:focus:border-brand-navy-strong"
                 />
-                <label className="text-xs font-medium text-zinc-500">
+                <label className="text-xs font-medium text-muted">
                   Promised amount (optional)
                 </label>
                 <input
@@ -226,18 +242,18 @@ export function CollectionRouteView({ schedules }: { schedules: ScheduleRow[] })
                   type="number"
                   step="0.01"
                   defaultValue={s.expectedAmount}
-                  className="h-11 rounded-lg border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-900"
+                  className="h-11 rounded-xl border border-border bg-background px-3 text-foreground outline-none focus:border-brand-navy dark:focus:border-brand-navy-strong"
                 />
-                <label className="text-xs font-medium text-zinc-500">Reason</label>
+                <label className="text-xs font-medium text-muted">Reason</label>
                 <input
                   name="reason"
-                  className="h-11 rounded-lg border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-900"
+                  className="h-11 rounded-xl border border-border bg-background px-3 text-foreground outline-none focus:border-brand-navy dark:focus:border-brand-navy-strong"
                 />
-                <label className="text-xs font-medium text-zinc-500">Remind me</label>
+                <label className="text-xs font-medium text-muted">Remind me</label>
                 <select
                   name="reminderOffset"
                   defaultValue="15_min_before"
-                  className="h-11 rounded-lg border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-900"
+                  className="h-11 rounded-xl border border-border bg-background px-3 text-foreground outline-none focus:border-brand-navy dark:focus:border-brand-navy-strong"
                 >
                   <option value="15_min_before">15 minutes before</option>
                   <option value="30_min_before">30 minutes before</option>
@@ -247,14 +263,14 @@ export function CollectionRouteView({ schedules }: { schedules: ScheduleRow[] })
                 <div className="flex gap-2">
                   <button
                     type="submit"
-                    className="h-10 flex-1 rounded-lg bg-zinc-900 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    className="h-10 flex-1 rounded-xl bg-brand-navy text-sm font-medium text-white dark:bg-brand-navy-strong"
                   >
                     Save
                   </button>
                   <button
                     type="button"
                     onClick={() => setOpenCard(null)}
-                    className="h-10 flex-1 rounded-lg border border-zinc-300 text-sm font-medium dark:border-zinc-700"
+                    className="h-10 flex-1 rounded-xl border border-border text-sm font-medium text-foreground"
                   >
                     Cancel
                   </button>

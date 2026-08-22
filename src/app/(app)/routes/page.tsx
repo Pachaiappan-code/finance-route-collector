@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Plus, Route as RouteIcon } from "lucide-react";
 import { auth } from "@/lib/auth/config";
 import { listRoutesWithCounts } from "@/lib/db/queries/routes";
 import { dayOfWeekName } from "@/lib/calculations/cycle";
@@ -16,19 +17,19 @@ export default async function RoutesPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-4 p-4 pt-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Routes</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Routes</h1>
         <Link
           href="/routes/new"
-          className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+          className="flex items-center gap-1.5 rounded-full bg-brand-navy px-4 py-2 text-sm font-medium text-white shadow-sm dark:bg-brand-navy-strong"
         >
-          + New route
+          <Plus size={15} /> New route
         </Link>
       </div>
 
       {routes.length === 0 && (
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted">
           No routes yet. Create your first route to start adding customers.
         </p>
       )}
@@ -37,19 +38,22 @@ export default async function RoutesPage() {
         .sort(([a], [b]) => a - b)
         .map(([dayOfWeek, dayRoutes]) => (
           <div key={dayOfWeek} className="flex flex-col gap-2">
-            <h2 className="text-sm font-medium text-zinc-500">
+            <h2 className="text-sm font-medium text-muted">
               {dayOfWeekName(dayOfWeek)}
             </h2>
             {dayRoutes.map((route) => (
               <div
                 key={route.id}
-                className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
+                className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4"
               >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-info-soft text-info">
+                  <RouteIcon size={17} />
+                </div>
                 <Link href={`/routes/${route.id}`} className="flex-1">
-                  <p className="font-medium text-zinc-900 dark:text-zinc-50">
+                  <p className="font-medium text-foreground">
                     {route.name}
                   </p>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-muted">
                     {route.customerCount} customer{route.customerCount === 1 ? "" : "s"}
                     {!route.isActive && " · Inactive"}
                   </p>
@@ -60,7 +64,7 @@ export default async function RoutesPage() {
                     await toggleRouteActive(route.id, !route.isActive);
                   }}
                 >
-                  <button className="text-xs font-medium text-zinc-500">
+                  <button className="text-xs font-medium text-muted">
                     {route.isActive ? "Deactivate" : "Activate"}
                   </button>
                 </form>

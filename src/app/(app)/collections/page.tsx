@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MapPin } from "lucide-react";
 import { auth } from "@/lib/auth/config";
 import { getTodaysRoutesSummary } from "@/lib/db/queries/collections";
 import { getDayOfWeek, dayOfWeekName, toCalendarDate } from "@/lib/calculations/cycle";
@@ -13,36 +14,51 @@ export default async function TodaysRoutesPage() {
   const routes = await getTodaysRoutesSummary(session!.user.businessId, dayOfWeek, dateStr);
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-4 p-4 pt-5">
       <div>
-        <p className="text-sm text-zinc-500">{dayOfWeekName(dayOfWeek)}</p>
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <p className="text-sm font-medium text-brand-navy dark:text-brand-navy-strong">
+          {dayOfWeekName(dayOfWeek)}
+        </p>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Today&apos;s routes
         </h1>
       </div>
 
       {routes.length === 0 && (
-        <p className="text-sm text-zinc-500">No active routes scheduled for today.</p>
+        <p className="text-sm text-muted">No active routes scheduled for today.</p>
       )}
 
-      <div className="flex flex-col gap-2">
-        {routes.map((r) => (
-          <Link
-            key={r.id}
-            href={`/collections/${r.id}`}
-            className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
-          >
-            <div>
-              <p className="font-medium text-zinc-900 dark:text-zinc-50">{r.name}</p>
-              <p className="text-xs text-zinc-500">
-                {r.paidCount}/{r.customerCount} collected
+      <div className="flex flex-col gap-2.5">
+        {routes.map((r) => {
+          const pct =
+            r.customerCount > 0 ? Math.round((r.paidCount / r.customerCount) * 100) : 0;
+          return (
+            <Link
+              key={r.id}
+              href={`/collections/${r.id}`}
+              className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-brand-navy/30"
+            >
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-info-soft text-info">
+                <MapPin size={18} />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-foreground">{r.name}</p>
+                <p className="text-xs text-muted">
+                  {r.paidCount}/{r.customerCount} collected
+                </p>
+                <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-border/60">
+                  <div
+                    className="h-full rounded-full bg-brand-green"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+              <p className="font-semibold text-foreground">
+                {formatCurrency(Number(r.expectedAmount))}
               </p>
-            </div>
-            <p className="font-semibold text-zinc-900 dark:text-zinc-50">
-              {formatCurrency(Number(r.expectedAmount))}
-            </p>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
