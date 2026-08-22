@@ -1,49 +1,76 @@
-# Android build (deferred)
+# Android build
 
-**Status: not yet started.** The Android SDK / Android Studio is not
-installed on this machine, so no `android/` Capacitor project has been
-generated yet. This document describes the steps for when it is ready —
-do not treat any of this as already done.
+**Status: set up and building via GitHub Actions.** No Android SDK is
+installed on this development machine, so the Capacitor Android project
+(`android/`) was scaffolded here but is **built on GitHub's servers**,
+not locally — GitHub's `ubuntu-latest` runners ship with the Android SDK
+and a JDK preinstalled, so no local Android Studio install was required
+to get a working APK pipeline.
 
-## Prerequisites to install first
+## How it works
 
-1. **Android Studio** (includes the Android SDK, platform tools, and an
-   emulator) — https://developer.android.com/studio
-2. A JDK compatible with the installed Android Gradle Plugin (Android
-   Studio bundles one).
-3. Accept SDK licenses: `sdkmanager --licenses` (run from inside the SDK's
-   `cmdline-tools/latest/bin`).
-
-## First-time Capacitor setup (once the SDK exists)
-
-```bash
-npm install @capacitor/core @capacitor/cli @capacitor/android
-npx cap init "EMF Collections" "com.emf.collections" --web-dir=out
-```
-
-Because this app uses Next.js Server Actions and API routes (not a static
-export), the Android WebView must point at the deployed Vercel URL rather
-than bundling static HTML — configure `capacitor.config.ts`:
+`capacitor.config.ts` points the Android WebView at the production Vercel
+URL (`server.url`), not at bundled local files:
 
 ```ts
 const config: CapacitorConfig = {
   appId: "com.emf.collections",
   appName: "EMF Collections",
+  webDir: "public",
   server: {
-    url: "https://<your-production-domain>",
+    url: "https://finance-route-collector.vercel.app",
     cleartext: false,
   },
 };
 ```
 
-Then:
+That means the Android app is a thin shell — every screen, every API
+call, every database read/write goes through the same Next.js server
+actions and the same Neon database as the website. Nothing is stored
+locally on the device except what the WebView itself caches. Installing
+the APK on 1 phone or 100 phones doesn't create separate data; they all
+read and write the same production data through the same backend.
 
-```bash
-npx cap add android
-npx cap sync android
-```
+## Building the APK
+
+`.github/workflows/android-build.yml` builds a **debug APK** automatically
+whenever `android/**`, `capacitor.config.ts`, or `resources/**` change on
+`main`, and can also be triggered manually:
+
+1. GitHub repo → **Actions** tab → **Android APK build** → **Run workflow**.
+2. Wait for the run to go green (a few minutes).
+3. Open the completed run → **Artifacts** → download `emf-collections-debug-apk`.
+4. Unzip it — inside is `app-debug.apk`.
+
+A debug APK is signed with Android's default debug key. It installs and
+runs exactly like a normal app; Android will show an "unknown source"
+warning on install (expected for anything not from the Play Store) but
+nothing else is different. This is what you hand to a client for
+sideloaded testing — see [Sending the APK to a client](#sending-the-apk-to-a-client) below.
+
+## Sending the APK to a client
+
+1. Download `app-debug.apk` from the Actions artifact (above).
+2. Send the file however's convenient — Google Drive link, WhatsApp,
+   email attachment, USB transfer. It's a normal file, no special hosting
+   needed.
+3. On the client's phone: open the file. Android will prompt to allow
+   installs from that source (Settings → apps that can install unknown
+   apps, or a one-time prompt depending on Android version) — they accept
+   that prompt, then tap **Install**.
+4. They open the app and log in with their own EMF account credentials.
+   Their data is exactly what's in the production database — the same
+   data they'd see logging into the website.
+
+No app store account, no review process, no waiting — this works today.
+The tradeoff: the client has to manually accept the "install unknown
+apps" prompt, and updates require sending a new APK (no auto-update).
+Publishing to Google Play (see below) removes both tradeoffs but takes
+longer to set up.
 
 ## Local Notifications plugin (section 23–24 of the spec)
+
+Not yet added. When ready:
 
 ```bash
 npm install @capacitor/local-notifications
@@ -54,7 +81,11 @@ Add the notification permission to `android/app/src/main/AndroidManifest.xml`
 per the plugin's docs, and implement the sync routine described in
 [notifications.md](./notifications.md) — it must run on app open/resume.
 
-## Signing
+## Signing a release build (needed for Google Play, optional for direct APK sharing)
+
+The debug APK above is fine for sending directly to a client. A **release**
+build (needed for Play Store, and generally recommended before wide
+distribution) needs its own signing key:
 
 1. Generate a keystore (once, keep it forever, back it up somewhere safe —
    losing it means you can never update the app on Play Store again):
@@ -62,17 +93,23 @@ per the plugin's docs, and implement the sync routine described in
    keytool -genkey -v -keystore emf-release.keystore -alias emf -keyalg RSA -keysize 2048 -validity 10000
    ```
 2. **Never commit the keystore or its passwords.** They're covered by
-   `.gitignore` (`*.keystore`, `*.jks`, `keystore.properties`). Store the
-   keystore file and passwords in a password manager or Vercel/GitHub
-   encrypted secrets if you automate builds via CI later.
-3. Reference it from `android/app/build.gradle` via a local
-   `keystore.properties` file (gitignored) — not hardcoded values.
+   `.gitignore` (`*.keystore`, `*.jks`, `keystore.properties`).
+3. To build release APKs/AABs via the same GitHub Actions pipeline, add
+   the keystore (base64-encoded) and its passwords as **GitHub Actions
+   secrets**, decode them in a workflow step, and reference them from
+   `android/app/build.gradle` via a `keystore.properties` file written at
+   build time — never hardcoded in the repo.
+4. Once signing is configured, extend `android-build.yml` (or add a
+   second workflow) to run `./gradlew assembleRelease` / `bundleRelease`
+   instead of `assembleDebug`.
 
-## Building
+## Building locally instead (optional)
+
+If you later install Android Studio, the same commands work locally:
 
 ```bash
 cd android
-./gradlew assembleDebug      # debug APK, for local testing
+./gradlew assembleDebug      # debug APK
 ./gradlew assembleRelease    # release APK, needs signing config above
 ./gradlew bundleRelease      # release AAB, for Play Store upload
 ```
@@ -86,7 +123,9 @@ android/app/build/outputs/bundle/release/app-release.aab
 
 **Do not report an APK/AAB as generated unless one of these files actually
 exists after a successful Gradle build** — verify with `ls` before telling
-the user it's ready.
+the user it's ready. Same rule applies to CI: check the workflow run
+actually succeeded and produced the artifact before telling the user it's
+ready.
 
 ## Google Play publishing
 

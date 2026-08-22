@@ -56,5 +56,10 @@ a real browser: auth, routes, customers, collection schedules, the
 Paid/Due/Partial collection-mode screen, next-cycle generation, payment
 promises + reminders, due list, reports, CSV export, settings. Deployed to
 Vercel production, verified with a real login + database round trip.
-Offline support (Phase 9) and the Android app (Phase 9/52) are not yet
-built — see the docs above for what's designed but not implemented.
+Light/dark theme (user-selectable) and branded design built on the EMF
+logo. Android is a Capacitor WebView shell around the same production
+site — no local SDK needed, it builds on GitHub Actions
+(`.github/workflows/android-build.yml`); see
+[docs/android-build.md](./docs/android-build.md) for how to grab the APK
+and send it to a client. Offline support and Android push notifications
+(Phase 9/7) are not yet built.
