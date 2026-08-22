@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">EMF Collections</string>
+    <string name="title_activity_main">EMF Collections</string>
+    <string name="package_name">com.emf.collections</string>
+    <string name="custom_url_scheme">com.emf.collections</string>
+</resources>
