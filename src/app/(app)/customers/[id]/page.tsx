@@ -50,13 +50,18 @@ export default async function CustomerDetailPage({
     ? Math.max(Number(currentCycle.expectedAmount) - Number(currentCycle.paidAmount), 0)
     : 0;
   const activePromise = currentCycleEntry?.promises.find((p) => p.status === "pending");
-  const loanOutstanding = primaryLoan
-    ? Math.max(
-        Number(primaryLoan.loan.totalPayableAmount) -
-          primaryLoan.cycles.reduce((sum, c) => sum + Number(c.cycle.paidAmount), 0),
-        0,
-      )
+  const totalPaid = primaryLoan
+    ? primaryLoan.cycles.reduce((sum, c) => sum + Number(c.cycle.paidAmount), 0)
     : 0;
+  const loanOutstanding = primaryLoan
+    ? Math.max(Number(primaryLoan.loan.totalPayableAmount) - totalPaid, 0)
+    : 0;
+  const monthsPaid = primaryLoan
+    ? primaryLoan.cycles.filter((c) => c.cycle.status === "paid").length
+    : 0;
+  const monthsRemaining = primaryLoan?.loan.numberOfMonths
+    ? Math.max(primaryLoan.loan.numberOfMonths - monthsPaid, 0)
+    : null;
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-5">
@@ -129,6 +134,12 @@ export default async function CustomerDetailPage({
                 value={primaryLoan.loan.status === "active" ? "Active" : "Completed"}
                 highlight={primaryLoan.loan.status === "completed"}
               />
+              {primaryLoan.loan.numberOfMonths && (
+                <>
+                  <InfoCard label="Loan term" value={`${primaryLoan.loan.numberOfMonths} months`} />
+                  <InfoCard label="Months remaining" value={`${monthsRemaining}`} />
+                </>
+              )}
             </div>
             {primaryLoan.loan.status === "active" ? (
               <CloseLoanForm
@@ -160,22 +171,14 @@ export default async function CustomerDetailPage({
                     {currentCycle.status}
                   </span>
                 </div>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                   <div>
-                    <p className="text-xs text-muted">Expected</p>
-                    <p className="font-medium text-foreground">
-                      {formatCurrency(Number(currentCycle.expectedAmount))}
-                    </p>
+                    <p className="text-xs text-muted">Balance</p>
+                    <p className="font-medium text-danger">{formatCurrency(loanOutstanding)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted">Paid</p>
-                    <p className="font-medium text-success">
-                      {formatCurrency(Number(currentCycle.paidAmount))}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted">Remaining</p>
-                    <p className="font-medium text-danger">{formatCurrency(remaining)}</p>
+                    <p className="text-xs text-muted">Total paid</p>
+                    <p className="font-medium text-success">{formatCurrency(totalPaid)}</p>
                   </div>
                 </div>
 
@@ -233,8 +236,11 @@ export default async function CustomerDetailPage({
               </div>
               <p className="mt-1 text-xs text-muted">
                 {formatCurrency(Number(loan.principalAmount))} principal ·{" "}
-                {formatCurrency(Number(loan.monthlyAmount))}/month · started{" "}
-                {formatDisplayDate(loan.startDate)}
+                {formatCurrency(Number(loan.monthlyAmount))}/month
+                {loan.numberOfMonths && (
+                  <> · {cycles.filter((c) => c.cycle.status === "paid").length}/{loan.numberOfMonths} months paid</>
+                )}{" "}
+                · started {formatDisplayDate(loan.startDate)}
               </p>
 
               {loan.status === "completed" && (

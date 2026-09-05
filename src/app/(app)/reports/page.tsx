@@ -202,6 +202,7 @@ export default async function ReportsPage({
                   <p className="flex items-center gap-1.5 text-xs text-muted">
                     Started {formatDisplayDate(l.startDate)} ·{" "}
                     <span className="capitalize">{l.status}</span>
+                    {l.numberOfMonths && <>· {l.monthsPaid}/{l.numberOfMonths} months</>}
                     {l.customerRating && <RatingStars rating={l.customerRating} />}
                   </p>
                 </div>

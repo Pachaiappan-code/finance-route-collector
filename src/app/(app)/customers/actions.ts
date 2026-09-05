@@ -38,15 +38,20 @@ function parseLoanForm(formData: FormData) {
   const parsed = loanInputSchema.safeParse({
     principalAmount: formData.get("principalAmount") || 0,
     interestAmount: formData.get("interestAmount") || 0,
-    totalPayableAmount: formData.get("totalPayableAmount") || 0,
-    monthlyAmount: formData.get("monthlyAmount"),
+    numberOfMonths: formData.get("numberOfMonths"),
     startDate: formData.get("startDate"),
     notes: formData.get("loanNotes") ?? "",
   });
   if (!parsed.success) {
     throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
   }
-  return parsed.data;
+  const data = parsed.data;
+  // The owner enters principal, interest and a loan term in months — the
+  // total payable and the monthly due amount are always derived from those,
+  // never entered directly, so they can never drift out of sync.
+  const totalPayableAmount = data.principalAmount + data.interestAmount;
+  const monthlyAmount = totalPayableAmount / data.numberOfMonths;
+  return { ...data, totalPayableAmount, monthlyAmount };
 }
 
 /** Creates a customer together with their first loan and that loan's first collection cycle. */
@@ -90,6 +95,7 @@ export async function createCustomer(formData: FormData) {
         interestAmount: String(loanData.interestAmount),
         totalPayableAmount: String(loanData.totalPayableAmount),
         monthlyAmount: String(loanData.monthlyAmount),
+        numberOfMonths: loanData.numberOfMonths,
         startDate: loanData.startDate,
         status: "active",
         notes: loanData.notes || null,
@@ -257,6 +263,7 @@ export async function createReLoan(
         interestAmount: String(loanData.interestAmount),
         totalPayableAmount: String(loanData.totalPayableAmount),
         monthlyAmount: String(loanData.monthlyAmount),
+        numberOfMonths: loanData.numberOfMonths,
         startDate: loanData.startDate,
         status: "active",
         notes: loanData.notes || null,

@@ -29,6 +29,13 @@
       "when": 1788589121586,
       "tag": "0003_unknown_radioactive_man",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788624085524,
+      "tag": "0004_slimy_overlord",
+      "breakpoints": true
     }
   ]
 }

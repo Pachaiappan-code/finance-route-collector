@@ -3,8 +3,9 @@ import { z } from "zod";
 export const loanInputSchema = z.object({
   principalAmount: z.coerce.number().nonnegative().default(0),
   interestAmount: z.coerce.number().nonnegative().default(0),
-  totalPayableAmount: z.coerce.number().nonnegative().default(0),
-  monthlyAmount: z.coerce.number().positive("Monthly amount must be greater than 0"),
+  // Monthly amount and total payable are derived from principal + interest
+  // divided across this many months — the owner enters months, not an amount.
+  numberOfMonths: z.coerce.number().int().positive("Number of months must be at least 1"),
   startDate: z.string().min(1, "Start date is required"),
   notes: z.string().trim().max(2000).optional().or(z.literal("")),
 });

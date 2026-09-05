@@ -18,11 +18,18 @@ customer (permanent) → loan (one or more, re-loans create new ones)
 
 - **`loans`** — a customer can have multiple loans over time (re-loan
   support). Each has its own `principal_amount`, `interest_amount`,
-  `total_payable_amount`, `monthly_amount`, `start_date`, and `status`
-  (`active`/`completed`). Re-loaning never touches a previous loan row —
-  it inserts a new one. Closing a loan (the "Complete loan" button, only
-  shown while `active`) sets `status = 'completed'`, `closed_at`, an
-  owner-entered `customer_rating` (1-5, DB-checked), and a
+  `total_payable_amount`, `monthly_amount`, `number_of_months`, `start_date`,
+  and `status` (`active`/`completed`). The owner only ever enters principal,
+  interest and a loan term in months on the form — `total_payable_amount`
+  (`principal + interest`) and `monthly_amount` (`total_payable_amount /
+  number_of_months`) are always derived server-side (see `parseLoanForm` in
+  `src/app/(app)/customers/actions.ts`), never entered directly, so they
+  can't drift out of sync. `number_of_months` is nullable because loans
+  created before this field existed don't have one (backfilled on migration
+  by dividing total by monthly, rounded). Re-loaning never touches a
+  previous loan row — it inserts a new one. Closing a loan (the "Complete
+  loan" button, only shown while `active`) sets `status = 'completed'`,
+  `closed_at`, an owner-entered `customer_rating` (1-5, DB-checked), and a
   `final_outstanding_amount` — an **editable** record of what was agreed
   at closing (e.g. writing off a small remainder), independent of the
   live computed balance and never fed back into any active-balance query.

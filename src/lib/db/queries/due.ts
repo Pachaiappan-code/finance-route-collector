@@ -22,6 +22,7 @@ export async function listDueCustomers(businessId: string, cycleMonth: string) {
     .where(
       and(
         eq(customers.businessId, businessId),
+        eq(customers.isActive, true),
         eq(collectionCycles.cycleMonth, cycleMonth),
         inArray(collectionCycles.status, ["partial", "unpaid"]),
       ),

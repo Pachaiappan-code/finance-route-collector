@@ -53,12 +53,7 @@ export default async function CustomersPage({
             className="flex items-center justify-between rounded-2xl border border-border bg-surface p-4"
           >
             <div>
-              <p className="font-medium text-foreground">
-                {c.name}{" "}
-                {!c.isActive && (
-                  <span className="text-xs font-normal text-muted">(inactive)</span>
-                )}
-              </p>
+              <p className="font-medium text-foreground">{c.name}</p>
               <p className="text-xs text-muted">
                 {c.customerCode} · {c.routeName} · {c.phone}
               </p>

@@ -1,10 +1,23 @@
 import Link from "next/link";
-import { ChevronRight, Route as RouteIcon, Bell, BarChart3, Settings as SettingsIcon } from "lucide-react";
+import {
+  ChevronRight,
+  Route as RouteIcon,
+  Bell,
+  BarChart3,
+  Settings as SettingsIcon,
+  UserX,
+} from "lucide-react";
 
 const LINKS = [
   { href: "/routes", label: "Routes", description: "Manage collection routes", icon: RouteIcon },
   { href: "/reminders", label: "Reminders", description: "Upcoming payment promises", icon: Bell },
   { href: "/reports", label: "Reports", description: "Daily, weekly & route summaries", icon: BarChart3 },
+  {
+    href: "/customers/deactivated",
+    label: "Deactivated customers",
+    description: "View and reactivate paused customers",
+    icon: UserX,
+  },
   { href: "/settings", label: "Settings", description: "Business preferences & appearance", icon: SettingsIcon },
 ] as const;
 

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth/config";
 import { getCustomerById } from "@/lib/db/queries/customers";
+import { LoanTermFields } from "@/components/loan-term-fields";
 import { createReLoan } from "../../actions";
 
 const inputClass =
@@ -55,58 +56,7 @@ export default async function ReLoanPage({
       )}
 
       <form action={action} className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="principalAmount" className={labelClass}>
-            Principal amount
-          </label>
-          <input
-            id="principalAmount"
-            name="principalAmount"
-            type="number"
-            step="0.01"
-            defaultValue="0"
-            className={inputClass}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="interestAmount" className={labelClass}>
-            Interest
-          </label>
-          <input
-            id="interestAmount"
-            name="interestAmount"
-            type="number"
-            step="0.01"
-            defaultValue="0"
-            className={inputClass}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="totalPayableAmount" className={labelClass}>
-            Total payable
-          </label>
-          <input
-            id="totalPayableAmount"
-            name="totalPayableAmount"
-            type="number"
-            step="0.01"
-            defaultValue="0"
-            className={inputClass}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="monthlyAmount" className={labelClass}>
-            Monthly payment amount
-          </label>
-          <input
-            id="monthlyAmount"
-            name="monthlyAmount"
-            type="number"
-            step="0.01"
-            required
-            className={inputClass}
-          />
-        </div>
+        <LoanTermFields />
         <div className="flex flex-col gap-1.5">
           <label htmlFor="startDate" className={labelClass}>
             Loan start date

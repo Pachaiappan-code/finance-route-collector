@@ -230,6 +230,11 @@ export const loans = pgTable(
       .notNull()
       .default("0"),
     monthlyAmount: numeric("monthly_amount", { precision: 12, scale: 2 }).notNull(),
+    // Loan term in months, entered by the owner. monthlyAmount is derived from
+    // it at creation time (totalPayableAmount / numberOfMonths) — kept here so
+    // "total months / months remaining" can be shown without recomputing it.
+    // Nullable because loans created before this field existed don't have one.
+    numberOfMonths: integer("number_of_months"),
     startDate: date("start_date").notNull(),
     status: loanStatusEnum("status").notNull().default("active"),
     notes: text("notes"),

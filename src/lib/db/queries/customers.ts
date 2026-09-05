@@ -2,8 +2,15 @@ import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { customers, routes } from "@/lib/db/schema";
 
-export async function listCustomers(businessId: string, search?: string) {
-  const conditions = [eq(customers.businessId, businessId)];
+export async function listCustomers(
+  businessId: string,
+  search?: string,
+  status: "active" | "inactive" = "active",
+) {
+  const conditions = [
+    eq(customers.businessId, businessId),
+    eq(customers.isActive, status === "active"),
+  ];
 
   if (search && search.trim()) {
     const term = `%${search.trim()}%`;

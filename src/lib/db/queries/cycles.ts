@@ -23,7 +23,13 @@ export async function getMonthSummary(businessId: string, cycleMonth: string) {
     })
     .from(collectionCycles)
     .innerJoin(customers, eq(collectionCycles.customerId, customers.id))
-    .where(and(eq(customers.businessId, businessId), eq(collectionCycles.cycleMonth, cycleMonth)));
+    .where(
+      and(
+        eq(customers.businessId, businessId),
+        eq(customers.isActive, true),
+        eq(collectionCycles.cycleMonth, cycleMonth),
+      ),
+    );
 
   const expected = Number(row?.expected ?? 0);
   const collected = Number(row?.collected ?? 0);
@@ -39,27 +45,52 @@ export async function getMonthSummary(businessId: string, cycleMonth: string) {
   };
 }
 
-/** Per-route current-month numbers, for route cards. */
+/**
+ * Per-route current-month numbers, for route cards. Uses correlated
+ * subqueries (not a join + groupBy) so a route with zero cycles this month
+ * still returns zeros correctly, and deactivated customers' cycles never
+ * count — see the fan-out lesson in docs/database.md for why a plain join
+ * here would be unsafe.
+ */
 export async function getRouteMonthSummaries(businessId: string, cycleMonth: string) {
   return db
     .select({
       routeId: routes.id,
       routeName: routes.name,
       dayOfWeek: routes.dayOfWeek,
-      customerCount: sql<number>`count(${collectionCycles.id})::int`,
-      paidCount: sql<number>`count(*) filter (where ${collectionCycles.status} = 'paid')::int`,
-      partialCount: sql<number>`count(*) filter (where ${collectionCycles.status} = 'partial')::int`,
-      unpaidCount: sql<number>`count(*) filter (where ${collectionCycles.status} = 'unpaid')::int`,
-      expected: sql<string>`coalesce(sum(${collectionCycles.expectedAmount}), 0)`,
-      collected: sql<string>`coalesce(sum(${collectionCycles.paidAmount}), 0)`,
+      customerCount: sql<number>`(
+        select count(*) from collection_cycles cc
+        join customers c on c.id = cc.customer_id and c.is_active = true
+        where cc.route_id = ${routes.id} and cc.cycle_month = ${cycleMonth}
+      )::int`,
+      paidCount: sql<number>`(
+        select count(*) from collection_cycles cc
+        join customers c on c.id = cc.customer_id and c.is_active = true
+        where cc.route_id = ${routes.id} and cc.cycle_month = ${cycleMonth} and cc.status = 'paid'
+      )::int`,
+      partialCount: sql<number>`(
+        select count(*) from collection_cycles cc
+        join customers c on c.id = cc.customer_id and c.is_active = true
+        where cc.route_id = ${routes.id} and cc.cycle_month = ${cycleMonth} and cc.status = 'partial'
+      )::int`,
+      unpaidCount: sql<number>`(
+        select count(*) from collection_cycles cc
+        join customers c on c.id = cc.customer_id and c.is_active = true
+        where cc.route_id = ${routes.id} and cc.cycle_month = ${cycleMonth} and cc.status = 'unpaid'
+      )::int`,
+      expected: sql<string>`coalesce((
+        select sum(cc.expected_amount) from collection_cycles cc
+        join customers c on c.id = cc.customer_id and c.is_active = true
+        where cc.route_id = ${routes.id} and cc.cycle_month = ${cycleMonth}
+      ), 0)`,
+      collected: sql<string>`coalesce((
+        select sum(cc.paid_amount) from collection_cycles cc
+        join customers c on c.id = cc.customer_id and c.is_active = true
+        where cc.route_id = ${routes.id} and cc.cycle_month = ${cycleMonth}
+      ), 0)`,
     })
     .from(routes)
-    .leftJoin(
-      collectionCycles,
-      and(eq(collectionCycles.routeId, routes.id), eq(collectionCycles.cycleMonth, cycleMonth)),
-    )
     .where(and(eq(routes.businessId, businessId), eq(routes.isActive, true)))
-    .groupBy(routes.id)
     .orderBy(asc(routes.dayOfWeek));
 }
 

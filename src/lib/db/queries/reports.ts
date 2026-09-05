@@ -132,6 +132,10 @@ export async function getReportLoans(businessId: string, filters: { status?: "ac
       collected: sql<string>`coalesce((
         select sum(${collectionCycles.paidAmount}) from ${collectionCycles} where ${collectionCycles.loanId} = ${loans.id}
       ), 0)`,
+      numberOfMonths: loans.numberOfMonths,
+      monthsPaid: sql<number>`coalesce((
+        select count(*) from ${collectionCycles} where ${collectionCycles.loanId} = ${loans.id} and ${collectionCycles.status} = 'paid'
+      ), 0)::int`,
       status: loans.status,
       startDate: loans.startDate,
       finalOutstandingAmount: loans.finalOutstandingAmount,

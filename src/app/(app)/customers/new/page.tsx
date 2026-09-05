@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth/config";
 import { listActiveRoutesForSelect } from "@/lib/db/queries/customers";
 import { dayOfWeekName } from "@/lib/calculations/cycle";
+import { LoanTermFields } from "@/components/loan-term-fields";
 import { createCustomer } from "../actions";
 
 const inputClass =
@@ -66,10 +67,7 @@ export default async function NewCustomerPage() {
           <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
             Loan
           </legend>
-          <Field label="Principal amount" name="principalAmount" type="number" step="0.01" defaultValue="0" />
-          <Field label="Interest" name="interestAmount" type="number" step="0.01" defaultValue="0" />
-          <Field label="Total payable" name="totalPayableAmount" type="number" step="0.01" defaultValue="0" />
-          <Field label="Monthly payment amount" name="monthlyAmount" type="number" step="0.01" required />
+          <LoanTermFields />
           <Field label="Loan start date" name="startDate" type="date" defaultValue={today} required />
           <Field label="Loan notes (optional)" name="loanNotes" textarea />
         </fieldset>
