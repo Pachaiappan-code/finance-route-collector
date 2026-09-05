@@ -9,10 +9,13 @@ const labelClass = "text-sm font-medium text-foreground";
 
 export default async function ReLoanPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { id } = await params;
+  const { error } = await searchParams;
   const session = await auth();
   const customer = await getCustomerById(session!.user.businessId, id);
   if (!customer) notFound();
@@ -21,7 +24,10 @@ export default async function ReLoanPage({
 
   async function action(formData: FormData) {
     "use server";
-    await createReLoan(id, formData);
+    const result = await createReLoan(id, formData);
+    if (result.error) {
+      redirect(`/customers/${id}/reloan?error=${encodeURIComponent(result.error)}`);
+    }
     redirect(`/customers/${id}`);
   }
 
@@ -43,6 +49,10 @@ export default async function ReLoanPage({
         This creates a brand-new, independent loan for {customer.name}. Their previous loan and
         all its payment history stay exactly as they are.
       </p>
+
+      {error && (
+        <p className="rounded-xl bg-danger-soft px-3.5 py-2.5 text-sm text-danger">{error}</p>
+      )}
 
       <form action={action} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">

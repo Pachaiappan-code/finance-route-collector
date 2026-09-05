@@ -17,12 +17,12 @@ export function DeleteCustomerButton({
   function handleClick() {
     if (!window.confirm(`Delete ${customerName}? This can't be undone. Are you sure?`)) return;
     startTransition(async () => {
-      try {
-        await deleteCustomer(customerId);
-        router.push("/customers");
-      } catch (err) {
-        window.alert(err instanceof Error ? err.message : "Could not delete customer.");
+      const result = await deleteCustomer(customerId);
+      if (result.error) {
+        window.alert(result.error);
+        return;
       }
+      router.push("/customers");
     });
   }
 

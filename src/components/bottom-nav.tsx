@@ -6,7 +6,7 @@ import { CalendarCheck, LayoutDashboard, MoreHorizontal, Users, Wallet } from "l
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/collections", label: "Today", icon: CalendarCheck },
+  { href: "/collections", label: "Routes", icon: CalendarCheck },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/due", label: "Due", icon: Wallet },
   { href: "/more", label: "More", icon: MoreHorizontal },

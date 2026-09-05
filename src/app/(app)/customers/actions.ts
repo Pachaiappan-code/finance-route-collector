@@ -141,8 +141,15 @@ export async function updateCustomer(customerId: string, formData: FormData) {
  * payment promise was ever recorded against them, deletion is refused (use
  * Deactivate instead) so real financial history can never be destroyed. This
  * is meant for cleaning up customers added by mistake, not for real accounts.
+ *
+ * Returns `{ error }` instead of throwing for expected failures — Next.js
+ * strips thrown Server Action error messages in production builds (they
+ * arrive on the client as a generic "Minified React error #441"), so any
+ * message the user actually needs to see must come back as data, not a throw.
  */
-export async function deleteCustomer(customerId: string) {
+export async function deleteCustomer(
+  customerId: string,
+): Promise<{ error?: string }> {
   const businessId = await requireBusinessId();
 
   const [customer] = await db
@@ -151,7 +158,7 @@ export async function deleteCustomer(customerId: string) {
     .where(eq(customers.id, customerId))
     .limit(1);
   if (!customer || customer.businessId !== businessId) {
-    throw new Error("Customer not found");
+    return { error: "Customer not found" };
   }
 
   const [hasPayment] = await db
@@ -160,9 +167,10 @@ export async function deleteCustomer(customerId: string) {
     .where(eq(payments.customerId, customerId))
     .limit(1);
   if (hasPayment) {
-    throw new Error(
-      "This customer has recorded payments and can't be deleted — use Deactivate instead to keep their history.",
-    );
+    return {
+      error:
+        "This customer has recorded payments and can't be deleted — use Deactivate instead to keep their history.",
+    };
   }
 
   const [hasPromise] = await db
@@ -171,9 +179,10 @@ export async function deleteCustomer(customerId: string) {
     .where(eq(paymentPromises.customerId, customerId))
     .limit(1);
   if (hasPromise) {
-    throw new Error(
-      "This customer has a payment promise on file and can't be deleted — use Deactivate instead.",
-    );
+    return {
+      error:
+        "This customer has a payment promise on file and can't be deleted — use Deactivate instead.",
+    };
   }
 
   await db.transaction(async (tx) => {
@@ -193,6 +202,7 @@ export async function deleteCustomer(customerId: string) {
 
   revalidatePath("/customers");
   revalidatePath("/dashboard");
+  return {};
 }
 
 export async function toggleCustomerActive(customerId: string, isActive: boolean) {
@@ -207,8 +217,19 @@ export async function toggleCustomerActive(customerId: string, isActive: boolean
   revalidatePath(`/customers/${customerId}`);
 }
 
-/** Re-loan: creates a brand-new, independent loan (and its first cycle) for an existing customer. The old loan and all its history are left untouched. */
-export async function createReLoan(customerId: string, formData: FormData) {
+/**
+ * Re-loan: creates a brand-new, independent loan (and its first cycle) for an
+ * existing customer. The old loan and all its history are left untouched.
+ *
+ * Returns `{ error }` instead of throwing for expected failures — Next.js
+ * strips thrown Server Action error messages in production builds (they
+ * arrive on the client as a generic "Minified React error #441"), so any
+ * message the user actually needs to see must come back as data, not a throw.
+ */
+export async function createReLoan(
+  customerId: string,
+  formData: FormData,
+): Promise<{ error?: string }> {
   const businessId = await requireBusinessId();
 
   const [customer] = await db
@@ -217,10 +238,15 @@ export async function createReLoan(customerId: string, formData: FormData) {
     .where(eq(customers.id, customerId))
     .limit(1);
   if (!customer || customer.businessId !== businessId) {
-    throw new Error("Customer not found");
+    return { error: "Customer not found" };
   }
 
-  const loanData = parseLoanForm(formData);
+  let loanData: ReturnType<typeof parseLoanForm>;
+  try {
+    loanData = parseLoanForm(formData);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Invalid loan details" };
+  }
 
   await db.transaction(async (tx) => {
     const [loan] = await tx
@@ -250,6 +276,7 @@ export async function createReLoan(customerId: string, formData: FormData) {
   revalidatePath("/customers");
   revalidatePath("/dashboard");
   revalidatePath(`/customers/${customerId}`);
+  return {};
 }
 
 /**
@@ -259,8 +286,16 @@ export async function createReLoan(customerId: string, formData: FormData) {
  * on this loan. Never touches payments/cycles history — closing is a
  * status + record change, not a data deletion. Re-loan becomes available
  * once a loan is completed.
+ *
+ * Returns `{ error }` instead of throwing for expected failures — Next.js
+ * strips thrown Server Action error messages in production builds (they
+ * arrive on the client as a generic "Minified React error #441"), so any
+ * message the user actually needs to see must come back as data, not a throw.
  */
-export async function closeLoan(customerId: string, formData: FormData) {
+export async function closeLoan(
+  customerId: string,
+  formData: FormData,
+): Promise<{ error?: string }> {
   const businessId = await requireBusinessId();
 
   const parsed = closeLoanSchema.safeParse({
@@ -270,7 +305,7 @@ export async function closeLoan(customerId: string, formData: FormData) {
     notes: formData.get("notes") ?? "",
   });
   if (!parsed.success) {
-    throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
+    return { error: parsed.error.issues.map((i) => i.message).join(", ") };
   }
   const data = parsed.data;
 
@@ -282,7 +317,7 @@ export async function closeLoan(customerId: string, formData: FormData) {
     .limit(1);
 
   if (!loan || loan.businessId !== businessId || loan.customerId !== customerId) {
-    throw new Error("Loan not found");
+    return { error: "Loan not found" };
   }
 
   await db
@@ -301,4 +336,5 @@ export async function closeLoan(customerId: string, formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/reports");
   revalidatePath(`/customers/${customerId}`);
+  return {};
 }

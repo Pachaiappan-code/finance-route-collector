@@ -39,7 +39,11 @@ export function CloseLoanForm({
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         fd.set("loanId", loanId);
-        await closeLoan(customerId, fd);
+        const result = await closeLoan(customerId, fd);
+        if (result.error) {
+          window.alert(result.error);
+          return;
+        }
         setOpen(false);
         startTransition(() => router.refresh());
       }}
