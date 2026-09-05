@@ -3,6 +3,7 @@ import { Bell, BellOff } from "lucide-react";
 import { auth } from "@/lib/auth/config";
 import { listUpcomingReminders } from "@/lib/db/queries/reminders";
 import { formatCurrency } from "@/lib/utils/format";
+import { formatDisplayDate, formatDisplayDateTime, formatDisplayTime } from "@/lib/utils/date";
 import { cancelPromiseAndReminder } from "../collections/actions";
 
 export default async function RemindersPage() {
@@ -42,13 +43,11 @@ export default async function RemindersPage() {
                   )}
                 </div>
                 <p className="text-xs text-muted">
-                  Promised {r.promisedDate} {r.promisedTime ?? ""}
+                  Promised {formatDisplayDate(r.promisedDate)}{" "}
+                  {r.promisedTime ? formatDisplayTime(r.promisedTime) : ""}
                 </p>
                 <p className="text-xs text-muted">
-                  Reminder at{" "}
-                  {new Date(r.scheduledAt).toLocaleString("en-IN", {
-                    timeZone: "Asia/Kolkata",
-                  })}
+                  Reminder at {formatDisplayDateTime(r.scheduledAt)}
                 </p>
                 <form
                   action={async () => {

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { PlayCircle } from "lucide-react";
 import { auth } from "@/lib/auth/config";
 import { db } from "@/lib/db";
@@ -20,7 +20,19 @@ export default async function RouteDetailPage({
   if (!route) notFound();
 
   const routeCustomers = await db
-    .select()
+    .select({
+      id: customers.id,
+      name: customers.name,
+      customerCode: customers.customerCode,
+      phone: customers.phone,
+      outstandingAmount: sql<string>`coalesce((
+        select sum(l.total_payable_amount - coalesce((
+          select sum(cc.paid_amount) from collection_cycles cc where cc.loan_id = l.id
+        ), 0))
+        from loans l
+        where l.customer_id = ${customers.id} and l.status = 'active'
+      ), 0)`,
+    })
     .from(customers)
     .where(and(eq(customers.routeId, id), eq(customers.isActive, true)))
     .orderBy(customers.routeSequence);

@@ -17,7 +17,10 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-surface/90 px-4 backdrop-blur-lg">
+      <header
+        className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-surface/90 px-4 backdrop-blur-lg"
+        style={{ height: "calc(4rem + var(--safe-top))", paddingTop: "var(--safe-top)" }}
+      >
         <div className="flex items-center gap-2.5">
           <Image
             src="/logo-icon.png"
@@ -51,7 +54,9 @@ export default async function AppLayout({
           </form>
         </div>
       </header>
-      <main className="flex-1 pb-24">{children}</main>
+      <main className="flex-1" style={{ paddingBottom: "calc(6rem + var(--safe-bottom))" }}>
+        {children}
+      </main>
       <BottomNav />
     </div>
   );

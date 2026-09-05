@@ -1,63 +1,147 @@
-import { and, asc, between, eq, sql } from "drizzle-orm";
+import { and, asc, between, desc, eq, gte, lte, sql, SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { collectionSchedules, customers, routes } from "@/lib/db/schema";
-import { toCalendarDate } from "@/lib/calculations/cycle";
-import { addDays } from "date-fns";
+import { collectionCycles, customers, loans, payments, routes } from "@/lib/db/schema";
 
-export async function getRouteReport(businessId: string, dateStr: string) {
+export type ReportFilters = {
+  routeId?: string;
+  status?: "paid" | "partial" | "unpaid";
+  customerId?: string;
+  paymentMethod?: "cash" | "gpay";
+};
+
+/** Collection-cycle summary for every calendar month touched by [from, to] — e.g. 01/08 to 05/09 includes both August and September cycles. */
+export async function getReportSummary(
+  businessId: string,
+  from: string,
+  to: string,
+  filters: ReportFilters = {},
+) {
+  const fromMonth = `${from.slice(0, 7)}-01`;
+  const toMonth = `${to.slice(0, 7)}-01`;
+
+  const conditions: SQL[] = [
+    eq(customers.businessId, businessId),
+    gte(collectionCycles.cycleMonth, fromMonth),
+    lte(collectionCycles.cycleMonth, toMonth),
+  ];
+  if (filters.routeId) conditions.push(eq(collectionCycles.routeId, filters.routeId));
+  if (filters.status) conditions.push(eq(collectionCycles.status, filters.status));
+
+  const [row] = await db
+    .select({
+      totalCustomers: sql<number>`count(distinct ${collectionCycles.customerId})::int`,
+      paidCount: sql<number>`count(*) filter (where ${collectionCycles.status} = 'paid')::int`,
+      partialCount: sql<number>`count(*) filter (where ${collectionCycles.status} = 'partial')::int`,
+      unpaidCount: sql<number>`count(*) filter (where ${collectionCycles.status} = 'unpaid')::int`,
+      expected: sql<string>`coalesce(sum(${collectionCycles.expectedAmount}), 0)`,
+      collected: sql<string>`coalesce(sum(${collectionCycles.paidAmount}), 0)`,
+    })
+    .from(collectionCycles)
+    .innerJoin(customers, eq(collectionCycles.customerId, customers.id))
+    .where(and(...conditions));
+
+  const expected = Number(row?.expected ?? 0);
+  const collected = Number(row?.collected ?? 0);
+
+  return {
+    totalCustomers: row?.totalCustomers ?? 0,
+    paidCount: row?.paidCount ?? 0,
+    partialCount: row?.partialCount ?? 0,
+    unpaidCount: row?.unpaidCount ?? 0,
+    expected,
+    collected,
+    pending: Math.max(expected - collected, 0),
+  };
+}
+
+export async function getReportRouteBreakdown(businessId: string, from: string, to: string) {
+  const fromMonth = `${from.slice(0, 7)}-01`;
+  const toMonth = `${to.slice(0, 7)}-01`;
+
   return db
     .select({
       routeId: routes.id,
       routeName: routes.name,
-      customerCount: sql<number>`count(${collectionSchedules.id})::int`,
-      expected: sql<string>`coalesce(sum(${collectionSchedules.expectedAmount}), 0)`,
-      collected: sql<string>`coalesce(sum(${collectionSchedules.expectedAmount}) filter (where ${collectionSchedules.status} = 'paid'), 0)`,
+      customerCount: sql<number>`count(distinct ${collectionCycles.customerId})::int`,
+      paidCount: sql<number>`count(*) filter (where ${collectionCycles.status} = 'paid')::int`,
+      partialCount: sql<number>`count(*) filter (where ${collectionCycles.status} = 'partial')::int`,
+      unpaidCount: sql<number>`count(*) filter (where ${collectionCycles.status} = 'unpaid')::int`,
+      expected: sql<string>`coalesce(sum(${collectionCycles.expectedAmount}), 0)`,
+      collected: sql<string>`coalesce(sum(${collectionCycles.paidAmount}), 0)`,
     })
     .from(routes)
     .leftJoin(
-      collectionSchedules,
+      collectionCycles,
       and(
-        eq(collectionSchedules.routeId, routes.id),
-        eq(collectionSchedules.scheduledDate, dateStr),
+        eq(collectionCycles.routeId, routes.id),
+        gte(collectionCycles.cycleMonth, fromMonth),
+        lte(collectionCycles.cycleMonth, toMonth),
       ),
     )
     .where(eq(routes.businessId, businessId))
     .groupBy(routes.id)
-    .orderBy(asc(routes.dayOfWeek), asc(routes.routeOrder));
+    .orderBy(asc(routes.dayOfWeek));
 }
 
-export async function getWeeklyReport(businessId: string, startDate: Date) {
-  const start = toCalendarDate(startDate);
-  const end = toCalendarDate(addDays(startDate, 6));
+/** Individual payment transactions with payment_date in [from, to] — the literal date range, not month-truncated. */
+export async function getReportPayments(
+  businessId: string,
+  from: string,
+  to: string,
+  filters: ReportFilters = {},
+) {
+  const conditions: SQL[] = [
+    eq(customers.businessId, businessId),
+    between(payments.paymentDate, from, to),
+  ];
+  if (filters.routeId) conditions.push(eq(collectionCycles.routeId, filters.routeId));
+  if (filters.customerId) conditions.push(eq(payments.customerId, filters.customerId));
+  if (filters.paymentMethod) conditions.push(eq(payments.paymentMethod, filters.paymentMethod));
 
-  const [row] = await db
+  return db
     .select({
-      customerCount: sql<number>`count(distinct ${collectionSchedules.customerId})::int`,
-      expected: sql<string>`coalesce(sum(${collectionSchedules.expectedAmount}), 0)`,
-      collected: sql<string>`coalesce(sum(${collectionSchedules.expectedAmount}) filter (where ${collectionSchedules.status} = 'paid'), 0)`,
+      id: payments.id,
+      customerName: customers.name,
+      routeName: routes.name,
+      loanId: collectionCycles.loanId,
+      cycleMonth: collectionCycles.cycleMonth,
+      amount: payments.amount,
+      paymentDate: payments.paymentDate,
+      paymentMethod: payments.paymentMethod,
+      notes: payments.notes,
     })
-    .from(collectionSchedules)
-    .innerJoin(customers, eq(collectionSchedules.customerId, customers.id))
-    .where(
-      and(
-        eq(customers.businessId, businessId),
-        between(collectionSchedules.scheduledDate, start, end),
-      ),
-    );
+    .from(payments)
+    .innerJoin(customers, eq(payments.customerId, customers.id))
+    .leftJoin(collectionCycles, eq(payments.collectionCycleId, collectionCycles.id))
+    .leftJoin(routes, eq(collectionCycles.routeId, routes.id))
+    .where(and(...conditions))
+    .orderBy(desc(payments.paymentDate));
+}
 
-  const [outstandingRow] = await db
+/** Every loan (original + re-loans), with collected-to-date and balance computed from its cycles. */
+export async function getReportLoans(businessId: string, filters: { status?: "active" | "completed" } = {}) {
+  const conditions: SQL[] = [eq(customers.businessId, businessId)];
+  if (filters.status) conditions.push(eq(loans.status, filters.status));
+
+  return db
     .select({
-      outstanding: sql<string>`coalesce(sum(${customers.outstandingAmount}), 0)`,
+      loanId: loans.id,
+      customerName: customers.name,
+      principalAmount: loans.principalAmount,
+      totalPayableAmount: loans.totalPayableAmount,
+      collected: sql<string>`coalesce((
+        select sum(${collectionCycles.paidAmount}) from ${collectionCycles} where ${collectionCycles.loanId} = ${loans.id}
+      ), 0)`,
+      status: loans.status,
+      startDate: loans.startDate,
+      lastPaymentDate: sql<string | null>`(
+        select max(p.payment_date) from payments p
+        inner join collection_cycles cc on cc.id = p.collection_cycle_id
+        where cc.loan_id = ${loans.id}
+      )`,
     })
-    .from(customers)
-    .where(eq(customers.businessId, businessId));
-
-  return {
-    start,
-    end,
-    customerCount: row?.customerCount ?? 0,
-    expected: row?.expected ?? "0",
-    collected: row?.collected ?? "0",
-    outstanding: outstandingRow?.outstanding ?? "0",
-  };
+    .from(loans)
+    .innerJoin(customers, eq(loans.customerId, customers.id))
+    .where(and(...conditions))
+    .orderBy(desc(loans.startDate));
 }

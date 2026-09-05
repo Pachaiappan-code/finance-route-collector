@@ -10,13 +10,6 @@ export const customerInputSchema = z.object({
   routeId: z.string().uuid("Select a route"),
   routeSequence: z.coerce.number().int().min(0).default(0),
 
-  principalAmount: z.coerce.number().nonnegative().default(0),
-  interestAmount: z.coerce.number().nonnegative().default(0),
-  totalRepaymentAmount: z.coerce.number().nonnegative().default(0),
-  collectionAmount: z.coerce.number().positive("Collection amount must be greater than 0"),
-  cycleDays: z.coerce.number().int().positive("Cycle days must be a positive integer"),
-  startDate: z.string().min(1, "Start date is required"),
-
   notes: z.string().trim().max(2000).optional().or(z.literal("")),
 });
 

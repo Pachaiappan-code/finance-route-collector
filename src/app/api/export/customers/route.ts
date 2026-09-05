@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth/config";
 import { db } from "@/lib/db";
-import { customers, routes } from "@/lib/db/schema";
+import { customers, loans, routes } from "@/lib/db/schema";
+import { formatDisplayDate } from "@/lib/utils/date";
 import { csvResponse } from "@/lib/utils/csv";
 
 export async function GET() {
@@ -15,15 +16,20 @@ export async function GET() {
       phone: customers.phone,
       area: customers.area,
       route: routes.name,
-      principalAmount: customers.principalAmount,
-      totalRepaymentAmount: customers.totalRepaymentAmount,
-      outstandingAmount: customers.outstandingAmount,
-      cycleDays: customers.cycleDays,
+      loanStatus: loans.status,
+      principalAmount: loans.principalAmount,
+      totalPayableAmount: loans.totalPayableAmount,
+      monthlyAmount: loans.monthlyAmount,
+      loanStartDate: loans.startDate,
       isActive: customers.isActive,
     })
     .from(customers)
     .innerJoin(routes, eq(customers.routeId, routes.id))
+    .leftJoin(loans, eq(loans.customerId, customers.id))
     .where(eq(customers.businessId, session.user.businessId));
 
-  return csvResponse("customers.csv", rows);
+  return csvResponse(
+    "customers.csv",
+    rows.map((r) => ({ ...r, loanStartDate: formatDisplayDate(r.loanStartDate) })),
+  );
 }

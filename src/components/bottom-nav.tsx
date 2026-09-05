@@ -16,7 +16,10 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg">
+    <nav
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/90 backdrop-blur-lg"
+      style={{ paddingBottom: "var(--safe-bottom)" }}
+    >
       <div className="mx-auto flex h-16 max-w-2xl">
         {NAV_ITEMS.map((item) => {
           const active =

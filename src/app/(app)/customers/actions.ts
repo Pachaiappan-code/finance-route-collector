@@ -5,9 +5,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/config";
 import { db } from "@/lib/db";
-import { collectionSchedules, customers } from "@/lib/db/schema";
+import { collectionCycles, customers, loans } from "@/lib/db/schema";
 import { nextCustomerCode } from "@/lib/db/queries/customers";
 import { customerInputSchema } from "@/lib/validation/customer";
+import { loanInputSchema } from "@/lib/validation/loan";
+import { resolveInitialCycleMonth } from "@/lib/calculations/cycle";
 
 async function requireBusinessId(): Promise<string> {
   const session = await auth();
@@ -24,24 +26,34 @@ function parseCustomerForm(formData: FormData) {
     area: formData.get("area") ?? "",
     routeId: formData.get("routeId"),
     routeSequence: formData.get("routeSequence") || 0,
-    principalAmount: formData.get("principalAmount") || 0,
-    interestAmount: formData.get("interestAmount") || 0,
-    totalRepaymentAmount: formData.get("totalRepaymentAmount") || 0,
-    collectionAmount: formData.get("collectionAmount"),
-    cycleDays: formData.get("cycleDays"),
-    startDate: formData.get("startDate"),
     notes: formData.get("notes") ?? "",
   });
-
   if (!parsed.success) {
     throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
   }
   return parsed.data;
 }
 
+function parseLoanForm(formData: FormData) {
+  const parsed = loanInputSchema.safeParse({
+    principalAmount: formData.get("principalAmount") || 0,
+    interestAmount: formData.get("interestAmount") || 0,
+    totalPayableAmount: formData.get("totalPayableAmount") || 0,
+    monthlyAmount: formData.get("monthlyAmount"),
+    startDate: formData.get("startDate"),
+    notes: formData.get("loanNotes") ?? "",
+  });
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
+  }
+  return parsed.data;
+}
+
+/** Creates a customer together with their first loan and that loan's first collection cycle. */
 export async function createCustomer(formData: FormData) {
   const businessId = await requireBusinessId();
-  const data = parseCustomerForm(formData);
+  const customerData = parseCustomerForm(formData);
+  const loanData = parseLoanForm(formData);
   const customerCode = await nextCustomerCode(businessId);
 
   const newCustomerId = await db.transaction(async (tx) => {
@@ -50,31 +62,47 @@ export async function createCustomer(formData: FormData) {
       .values({
         businessId,
         customerCode,
-        name: data.name,
-        phone: data.phone,
-        alternatePhone: data.alternatePhone || null,
-        address: data.address || null,
-        area: data.area || null,
-        routeId: data.routeId,
-        routeSequence: data.routeSequence,
-        principalAmount: String(data.principalAmount),
-        interestAmount: String(data.interestAmount),
-        totalRepaymentAmount: String(data.totalRepaymentAmount),
-        collectionAmount: String(data.collectionAmount),
-        outstandingAmount: String(data.totalRepaymentAmount),
-        cycleDays: data.cycleDays,
-        startDate: data.startDate,
-        notes: data.notes || null,
+        name: customerData.name,
+        phone: customerData.phone,
+        alternatePhone: customerData.alternatePhone || null,
+        address: customerData.address || null,
+        area: customerData.area || null,
+        routeId: customerData.routeId,
+        routeSequence: customerData.routeSequence,
+        // Loan financials now live on `loans`; these inline columns are
+        // deprecated but kept NOT NULL for backward compatibility, so we
+        // mirror the first loan's numbers into them for any old code path.
+        principalAmount: String(loanData.principalAmount),
+        interestAmount: String(loanData.interestAmount),
+        totalRepaymentAmount: String(loanData.totalPayableAmount),
+        collectionAmount: String(loanData.monthlyAmount),
+        outstandingAmount: String(loanData.totalPayableAmount),
+        startDate: loanData.startDate,
+        notes: customerData.notes || null,
       })
       .returning({ id: customers.id });
 
-    await tx.insert(collectionSchedules).values({
+    const [loan] = await tx
+      .insert(loans)
+      .values({
+        customerId: customer.id,
+        principalAmount: String(loanData.principalAmount),
+        interestAmount: String(loanData.interestAmount),
+        totalPayableAmount: String(loanData.totalPayableAmount),
+        monthlyAmount: String(loanData.monthlyAmount),
+        startDate: loanData.startDate,
+        status: "active",
+        notes: loanData.notes || null,
+      })
+      .returning({ id: loans.id });
+
+    await tx.insert(collectionCycles).values({
+      loanId: loan.id,
       customerId: customer.id,
-      routeId: data.routeId,
-      scheduledDate: data.startDate,
-      expectedAmount: String(data.collectionAmount),
-      cycleNumber: 1,
-      status: "pending",
+      routeId: customerData.routeId,
+      cycleMonth: resolveInitialCycleMonth(loanData.startDate),
+      expectedAmount: String(loanData.monthlyAmount),
+      status: "unpaid",
     });
 
     return customer.id;
@@ -84,6 +112,7 @@ export async function createCustomer(formData: FormData) {
   redirect(`/customers/${newCustomerId}`);
 }
 
+/** Updates customer profile fields only — loan terms are changed via re-loan, not by editing the customer record. */
 export async function updateCustomer(customerId: string, formData: FormData) {
   const businessId = await requireBusinessId();
   const data = parseCustomerForm(formData);
@@ -98,12 +127,6 @@ export async function updateCustomer(customerId: string, formData: FormData) {
       area: data.area || null,
       routeId: data.routeId,
       routeSequence: data.routeSequence,
-      principalAmount: String(data.principalAmount),
-      interestAmount: String(data.interestAmount),
-      totalRepaymentAmount: String(data.totalRepaymentAmount),
-      collectionAmount: String(data.collectionAmount),
-      cycleDays: data.cycleDays,
-      startDate: data.startDate,
       notes: data.notes || null,
       updatedAt: new Date(),
     })
@@ -122,5 +145,50 @@ export async function toggleCustomerActive(customerId: string, isActive: boolean
     .where(and(eq(customers.businessId, businessId), eq(customers.id, customerId)));
 
   revalidatePath("/customers");
+  revalidatePath(`/customers/${customerId}`);
+}
+
+/** Re-loan: creates a brand-new, independent loan (and its first cycle) for an existing customer. The old loan and all its history are left untouched. */
+export async function createReLoan(customerId: string, formData: FormData) {
+  const businessId = await requireBusinessId();
+
+  const [customer] = await db
+    .select({ id: customers.id, routeId: customers.routeId, businessId: customers.businessId })
+    .from(customers)
+    .where(eq(customers.id, customerId))
+    .limit(1);
+  if (!customer || customer.businessId !== businessId) {
+    throw new Error("Customer not found");
+  }
+
+  const loanData = parseLoanForm(formData);
+
+  await db.transaction(async (tx) => {
+    const [loan] = await tx
+      .insert(loans)
+      .values({
+        customerId: customer.id,
+        principalAmount: String(loanData.principalAmount),
+        interestAmount: String(loanData.interestAmount),
+        totalPayableAmount: String(loanData.totalPayableAmount),
+        monthlyAmount: String(loanData.monthlyAmount),
+        startDate: loanData.startDate,
+        status: "active",
+        notes: loanData.notes || null,
+      })
+      .returning({ id: loans.id });
+
+    await tx.insert(collectionCycles).values({
+      loanId: loan.id,
+      customerId: customer.id,
+      routeId: customer.routeId,
+      cycleMonth: resolveInitialCycleMonth(loanData.startDate),
+      expectedAmount: String(loanData.monthlyAmount),
+      status: "unpaid",
+    });
+  });
+
+  revalidatePath("/customers");
+  revalidatePath("/dashboard");
   revalidatePath(`/customers/${customerId}`);
 }

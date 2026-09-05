@@ -64,25 +64,19 @@ export default async function NewCustomerPage() {
 
         <fieldset className="flex flex-col gap-3">
           <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
-            Finance
+            Loan
           </legend>
           <Field label="Principal amount" name="principalAmount" type="number" step="0.01" defaultValue="0" />
-          <Field label="Interest amount" name="interestAmount" type="number" step="0.01" defaultValue="0" />
-          <Field label="Total repayment amount" name="totalRepaymentAmount" type="number" step="0.01" defaultValue="0" />
-          <Field label="Expected collection per cycle" name="collectionAmount" type="number" step="0.01" required />
+          <Field label="Interest" name="interestAmount" type="number" step="0.01" defaultValue="0" />
+          <Field label="Total payable" name="totalPayableAmount" type="number" step="0.01" defaultValue="0" />
+          <Field label="Monthly payment amount" name="monthlyAmount" type="number" step="0.01" required />
+          <Field label="Loan start date" name="startDate" type="date" defaultValue={today} required />
+          <Field label="Loan notes (optional)" name="loanNotes" textarea />
         </fieldset>
 
         <fieldset className="flex flex-col gap-3">
           <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
-            Cycle
-          </legend>
-          <Field label="Cycle length (days)" name="cycleDays" type="number" defaultValue="7" required />
-          <Field label="Start date" name="startDate" type="date" defaultValue={today} required />
-        </fieldset>
-
-        <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
-            Notes
+            Customer notes
           </legend>
           <Field label="Notes" name="notes" textarea />
         </fieldset>

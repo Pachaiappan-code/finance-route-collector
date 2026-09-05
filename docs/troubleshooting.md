@@ -1,5 +1,36 @@
 # Troubleshooting
 
+## A per-customer/loan total looks doubled or multiplied
+
+You're joining `loans` to `collection_cycles` (one-to-many) and then
+summing a loan-level column in the same aggregate query — classic SQL
+fan-out, the loan's total gets counted once per cycle row. Hit and fixed
+in `listCustomers`/`routes/[id]/page.tsx` during the monthly-collection
+rewrite. Fix: compute the per-loan paid-to-date via a **correlated scalar
+subquery**, not a join, then sum across loans. See
+[database.md](./database.md#a-hard-won-lesson-on-aggregate-queries-across-this-join).
+
+## A raw `sql\`col = any(${array})\`` query fails or hangs
+
+Passing a plain JS array into a raw `sql` template's `any(${array})`
+doesn't bind correctly with this project's neon-serverless driver — it
+either errors or (worse) hangs a page load indefinitely (`getCycleFollowUpInfo`
+did this during development). Use Drizzle's `inArray(column, array)` helper
+instead — it generates correct parameterized SQL for this driver every
+time. Grep the codebase for `= any(\$\{` before adding a new raw-SQL
+array-membership check; there should be zero matches.
+
+## A Neon branch that worked before suddenly fails with "password authentication failed"
+
+Hit once during development on a branch that had authenticated fine
+minutes earlier — not caused by anything in this repo's code or config.
+Neon-side account/branch state, not a local misconfiguration. If it
+happens again: verify the branch still exists in the Neon console, try
+regenerating the branch's password/role credentials there, and in the
+meantime point `.env.local` at a different working branch (e.g.
+production) rather than blocking on it — see the comment left in
+`.env.local` from when this happened.
+
 ## "No transactions support in neon-http driver"
 
 You're using the wrong Neon driver for a code path that needs

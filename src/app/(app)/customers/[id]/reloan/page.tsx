@@ -1,0 +1,128 @@
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/lib/auth/config";
+import { getCustomerById } from "@/lib/db/queries/customers";
+import { createReLoan } from "../../actions";
+
+const inputClass =
+  "h-12 rounded-xl border border-border bg-background px-3.5 text-base text-foreground outline-none transition-colors focus:border-brand-navy dark:focus:border-brand-navy-strong";
+const labelClass = "text-sm font-medium text-foreground";
+
+export default async function ReLoanPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const session = await auth();
+  const customer = await getCustomerById(session!.user.businessId, id);
+  if (!customer) notFound();
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  async function action(formData: FormData) {
+    "use server";
+    await createReLoan(id, formData);
+    redirect(`/customers/${id}`);
+  }
+
+  return (
+    <div className="flex flex-col gap-4 p-4 pt-5">
+      <div>
+        <p className="text-sm font-medium text-brand-navy dark:text-brand-navy-strong">
+          Re-loan
+        </p>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {customer.name}
+        </h1>
+        <p className="text-sm text-muted">
+          {customer.customerCode} · {customer.routeName} · {customer.phone}
+        </p>
+      </div>
+
+      <p className="rounded-xl bg-info-soft px-3.5 py-2.5 text-sm text-info">
+        This creates a brand-new, independent loan for {customer.name}. Their previous loan and
+        all its payment history stay exactly as they are.
+      </p>
+
+      <form action={action} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="principalAmount" className={labelClass}>
+            Principal amount
+          </label>
+          <input
+            id="principalAmount"
+            name="principalAmount"
+            type="number"
+            step="0.01"
+            defaultValue="0"
+            className={inputClass}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="interestAmount" className={labelClass}>
+            Interest
+          </label>
+          <input
+            id="interestAmount"
+            name="interestAmount"
+            type="number"
+            step="0.01"
+            defaultValue="0"
+            className={inputClass}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="totalPayableAmount" className={labelClass}>
+            Total payable
+          </label>
+          <input
+            id="totalPayableAmount"
+            name="totalPayableAmount"
+            type="number"
+            step="0.01"
+            defaultValue="0"
+            className={inputClass}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="monthlyAmount" className={labelClass}>
+            Monthly payment amount
+          </label>
+          <input
+            id="monthlyAmount"
+            name="monthlyAmount"
+            type="number"
+            step="0.01"
+            required
+            className={inputClass}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="startDate" className={labelClass}>
+            Loan start date
+          </label>
+          <input
+            id="startDate"
+            name="startDate"
+            type="date"
+            defaultValue={today}
+            required
+            className={inputClass}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="loanNotes" className={labelClass}>
+            Notes (optional)
+          </label>
+          <textarea id="loanNotes" name="loanNotes" rows={3} className="rounded-xl border border-border bg-background p-3.5 text-base text-foreground outline-none focus:border-brand-navy dark:focus:border-brand-navy-strong" />
+        </div>
+        <button
+          type="submit"
+          className="h-12 rounded-xl bg-brand-navy text-base font-medium text-white shadow-sm dark:bg-brand-navy-strong"
+        >
+          Create new loan
+        </button>
+      </form>
+    </div>
+  );
+}

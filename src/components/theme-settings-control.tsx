@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Laptop, Moon, Sun } from "lucide-react";
-
-type ThemeChoice = "light" | "dark" | "system";
+import { useThemeChoice, type ThemeChoice } from "@/lib/hooks/use-is-dark";
 
 const OPTIONS: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Light", icon: Sun },
@@ -14,27 +12,14 @@ const OPTIONS: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
 function applyTheme(choice: ThemeChoice) {
   const isDark =
     choice === "dark" ||
-    (choice === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
+    (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", isDark);
 }
 
 export function ThemeSettingsControl() {
-  const [choice, setChoice] = useState<ThemeChoice>("system");
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    try {
-      const stored = localStorage.getItem("theme");
-      setChoice(stored === "dark" || stored === "light" ? stored : "system");
-    } catch {
-      // ignore storage failures
-    }
-  }, []);
+  const choice = useThemeChoice();
 
   function select(next: ThemeChoice) {
-    setChoice(next);
     applyTheme(next);
     try {
       if (next === "system") {
@@ -51,7 +36,7 @@ export function ThemeSettingsControl() {
     <div className="flex gap-2">
       {OPTIONS.map((opt) => {
         const Icon = opt.icon;
-        const active = mounted && choice === opt.value;
+        const active = choice === opt.value;
         return (
           <button
             key={opt.value}

@@ -1,43 +1,72 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { collectionSchedules, payments, paymentPromises } from "@/lib/db/schema";
+import { collectionCycles, loans, payments, paymentPromises } from "@/lib/db/schema";
 
-export async function getCustomerHistory(customerId: string) {
-  const schedules = await db
+/** Every loan a customer has ever had, each with its full cycle/payment/promise history — newest loan first. */
+export async function getCustomerLoanHistory(customerId: string) {
+  const customerLoans = await db
     .select()
-    .from(collectionSchedules)
-    .where(eq(collectionSchedules.customerId, customerId))
-    .orderBy(desc(collectionSchedules.scheduledDate));
+    .from(loans)
+    .where(eq(loans.customerId, customerId))
+    .orderBy(desc(loans.startDate), desc(loans.createdAt));
 
-  const customerPayments = await db
+  if (customerLoans.length === 0) return [];
+
+  const loanIds = customerLoans.map((l) => l.id);
+
+  const cycles = await db
     .select()
-    .from(payments)
-    .where(eq(payments.customerId, customerId))
-    .orderBy(desc(payments.paymentDate));
+    .from(collectionCycles)
+    .where(inArray(collectionCycles.loanId, loanIds))
+    .orderBy(desc(collectionCycles.cycleMonth));
 
-  const customerPromises = await db
-    .select()
-    .from(paymentPromises)
-    .where(eq(paymentPromises.customerId, customerId))
-    .orderBy(desc(paymentPromises.promisedDate));
+  const cycleIds = cycles.map((c) => c.id);
 
-  const paymentsBySchedule = new Map<string, typeof customerPayments>();
-  for (const p of customerPayments) {
-    const list = paymentsBySchedule.get(p.collectionScheduleId) ?? [];
+  const cyclePayments = cycleIds.length
+    ? await db
+        .select()
+        .from(payments)
+        .where(inArray(payments.collectionCycleId, cycleIds))
+        .orderBy(desc(payments.paymentDate), desc(payments.createdAt))
+    : [];
+
+  const cyclePromises = cycleIds.length
+    ? await db
+        .select()
+        .from(paymentPromises)
+        .where(inArray(paymentPromises.collectionCycleId, cycleIds))
+        .orderBy(desc(paymentPromises.promisedDate))
+    : [];
+
+  const paymentsByCycle = new Map<string, typeof cyclePayments>();
+  for (const p of cyclePayments) {
+    if (!p.collectionCycleId) continue;
+    const list = paymentsByCycle.get(p.collectionCycleId) ?? [];
     list.push(p);
-    paymentsBySchedule.set(p.collectionScheduleId, list);
+    paymentsByCycle.set(p.collectionCycleId, list);
   }
 
-  const promisesBySchedule = new Map<string, typeof customerPromises>();
-  for (const p of customerPromises) {
-    const list = promisesBySchedule.get(p.collectionScheduleId) ?? [];
+  const promisesByCycle = new Map<string, typeof cyclePromises>();
+  for (const p of cyclePromises) {
+    if (!p.collectionCycleId) continue;
+    const list = promisesByCycle.get(p.collectionCycleId) ?? [];
     list.push(p);
-    promisesBySchedule.set(p.collectionScheduleId, list);
+    promisesByCycle.set(p.collectionCycleId, list);
   }
 
-  return schedules.map((schedule) => ({
-    schedule,
-    payments: paymentsBySchedule.get(schedule.id) ?? [],
-    promises: promisesBySchedule.get(schedule.id) ?? [],
+  const cyclesByLoan = new Map<string, typeof cycles>();
+  for (const c of cycles) {
+    const list = cyclesByLoan.get(c.loanId) ?? [];
+    list.push(c);
+    cyclesByLoan.set(c.loanId, list);
+  }
+
+  return customerLoans.map((loan) => ({
+    loan,
+    cycles: (cyclesByLoan.get(loan.id) ?? []).map((cycle) => ({
+      cycle,
+      payments: paymentsByCycle.get(cycle.id) ?? [],
+      promises: promisesByCycle.get(cycle.id) ?? [],
+    })),
   }));
 }

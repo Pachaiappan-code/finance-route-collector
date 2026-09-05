@@ -36,7 +36,10 @@ export default async function LoginPage({
         aria-hidden
         className="pointer-events-none absolute inset-x-0 -top-40 h-80 bg-gradient-to-b from-brand-navy/10 to-transparent dark:from-brand-navy/20"
       />
-      <div className="absolute right-4 top-4">
+      <div
+        className="absolute right-4"
+        style={{ top: "calc(1rem + var(--safe-top))" }}
+      >
         <ThemeToggle />
       </div>
 

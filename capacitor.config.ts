@@ -11,6 +11,19 @@ const config: CapacitorConfig = {
     url: "https://finance-route-collector.vercel.app",
     cleartext: false,
   },
+  plugins: {
+    // Capacitor 8's edge-to-edge system bars (bundled in @capacitor/core,
+    // not the legacy @capacitor/status-bar plugin). Solid background colors
+    // are no longer supported on Android — the status/nav bars are always
+    // transparent overlays showing our own page background through them.
+    // "DEFAULT" matches system light/dark, same as our own theme script's
+    // default; src/components/native-system-bars.tsx keeps it in sync
+    // whenever the user overrides the in-app theme away from system.
+    SystemBars: {
+      insetsHandling: "css",
+      style: "DEFAULT",
+    },
+  },
 };
 
 export default config;

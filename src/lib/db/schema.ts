@@ -37,6 +37,19 @@ export const paymentMethodEnum = pgEnum("payment_method", [
   "upi",
   "bank_transfer",
   "other",
+  // Added for the monthly collection model — the only two methods offered
+  // in the payment form now, but "upi"/"bank_transfer"/"other" are kept so
+  // existing historical payments still display correctly.
+  "gpay",
+]);
+
+export const loanStatusEnum = pgEnum("loan_status", ["active", "completed"]);
+
+// Status of one loan's collection obligation for one calendar month.
+export const cycleStatusEnum = pgEnum("cycle_status", [
+  "unpaid",
+  "partial",
+  "paid",
 ]);
 
 export const promiseStatusEnum = pgEnum("promise_status", [
@@ -193,8 +206,83 @@ export const customers = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// collection_schedules — one row per expected collection event; never
-// overwritten, only status-transitioned or superseded by a new row.
+// loans — a customer can have multiple loans over time (re-loan support).
+// The customer's old inline principal/interest/... columns above are kept
+// (deprecated, read-only) for backward compatibility with pre-migration
+// data; new code reads/writes loan financials here instead.
+// ---------------------------------------------------------------------------
+
+export const loans = pgTable(
+  "loans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    principalAmount: numeric("principal_amount", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
+    interestAmount: numeric("interest_amount", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
+    totalPayableAmount: numeric("total_payable_amount", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
+    monthlyAmount: numeric("monthly_amount", { precision: 12, scale: 2 }).notNull(),
+    startDate: date("start_date").notNull(),
+    status: loanStatusEnum("status").notNull().default("active"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("loans_customer_idx").on(table.customerId),
+    index("loans_status_idx").on(table.status),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// collection_cycles — one row per loan per calendar month. This is the
+// monthly replacement for the old per-date collection_schedules below.
+// expectedAmount/paidAmount/status are a maintained cache (recomputed from
+// payments on every write) so dashboard/route aggregates don't need to sum
+// the full payments table on every read.
+// ---------------------------------------------------------------------------
+
+export const collectionCycles = pgTable(
+  "collection_cycles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    loanId: uuid("loan_id")
+      .notNull()
+      .references(() => loans.id, { onDelete: "restrict" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    routeId: uuid("route_id")
+      .notNull()
+      .references(() => routes.id, { onDelete: "restrict" }),
+    // Always the 1st of the month, e.g. 2026-09-01 — identifies the cycle.
+    cycleMonth: date("cycle_month").notNull(),
+    expectedAmount: numeric("expected_amount", { precision: 12, scale: 2 }).notNull(),
+    paidAmount: numeric("paid_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    status: cycleStatusEnum("status").notNull().default("unpaid"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("collection_cycles_loan_month_idx").on(table.loanId, table.cycleMonth),
+    index("collection_cycles_customer_idx").on(table.customerId),
+    index("collection_cycles_route_idx").on(table.routeId),
+    index("collection_cycles_month_idx").on(table.cycleMonth),
+    index("collection_cycles_status_idx").on(table.status),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// collection_schedules — DEPRECATED (superseded by collection_cycles above).
+// Kept, with its historical rows intact, purely for backward-compatible
+// migration/rollback safety. New code does not write to this table.
 // ---------------------------------------------------------------------------
 
 export const collectionSchedules = pgTable(
@@ -233,9 +321,15 @@ export const payments = pgTable(
     customerId: uuid("customer_id")
       .notNull()
       .references(() => customers.id, { onDelete: "restrict" }),
-    collectionScheduleId: uuid("collection_schedule_id")
-      .notNull()
-      .references(() => collectionSchedules.id, { onDelete: "restrict" }),
+    // Deprecated — nullable, kept only for pre-migration rows. New payments
+    // link to collectionCycleId instead.
+    collectionScheduleId: uuid("collection_schedule_id").references(
+      () => collectionSchedules.id,
+      { onDelete: "restrict" },
+    ),
+    collectionCycleId: uuid("collection_cycle_id").references(() => collectionCycles.id, {
+      onDelete: "restrict",
+    }),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
     paymentDate: date("payment_date").notNull(),
     paymentTime: time("payment_time").notNull(),
@@ -252,6 +346,7 @@ export const payments = pgTable(
   (table) => [
     index("payments_customer_idx").on(table.customerId),
     index("payments_schedule_idx").on(table.collectionScheduleId),
+    index("payments_cycle_idx").on(table.collectionCycleId),
     uniqueIndex("payments_client_request_idx").on(table.clientRequestId),
   ],
 );
@@ -267,9 +362,14 @@ export const paymentPromises = pgTable(
     customerId: uuid("customer_id")
       .notNull()
       .references(() => customers.id, { onDelete: "restrict" }),
-    collectionScheduleId: uuid("collection_schedule_id")
-      .notNull()
-      .references(() => collectionSchedules.id, { onDelete: "restrict" }),
+    // Deprecated — nullable, kept only for pre-migration rows.
+    collectionScheduleId: uuid("collection_schedule_id").references(
+      () => collectionSchedules.id,
+      { onDelete: "restrict" },
+    ),
+    collectionCycleId: uuid("collection_cycle_id").references(() => collectionCycles.id, {
+      onDelete: "restrict",
+    }),
     promisedDate: date("promised_date").notNull(),
     promisedTime: time("promised_time"),
     promisedAmount: numeric("promised_amount", { precision: 12, scale: 2 }),
@@ -282,6 +382,7 @@ export const paymentPromises = pgTable(
   (table) => [
     index("payment_promises_customer_idx").on(table.customerId),
     index("payment_promises_schedule_idx").on(table.collectionScheduleId),
+    index("payment_promises_cycle_idx").on(table.collectionCycleId),
     index("payment_promises_status_idx").on(table.status),
   ],
 );
@@ -396,11 +497,38 @@ export const customersRelations = relations(customers, ({ one, many }) => ({
     fields: [customers.routeId],
     references: [routes.id],
   }),
+  loans: many(loans),
   collectionSchedules: many(collectionSchedules),
+  collectionCycles: many(collectionCycles),
   payments: many(payments),
   paymentPromises: many(paymentPromises),
   reminders: many(reminders),
   notes: many(customerNotes),
+}));
+
+export const loansRelations = relations(loans, ({ one, many }) => ({
+  customer: one(customers, {
+    fields: [loans.customerId],
+    references: [customers.id],
+  }),
+  collectionCycles: many(collectionCycles),
+}));
+
+export const collectionCyclesRelations = relations(collectionCycles, ({ one, many }) => ({
+  loan: one(loans, {
+    fields: [collectionCycles.loanId],
+    references: [loans.id],
+  }),
+  customer: one(customers, {
+    fields: [collectionCycles.customerId],
+    references: [customers.id],
+  }),
+  route: one(routes, {
+    fields: [collectionCycles.routeId],
+    references: [routes.id],
+  }),
+  payments: many(payments),
+  paymentPromises: many(paymentPromises),
 }));
 
 export const collectionSchedulesRelations = relations(
@@ -428,6 +556,10 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
     fields: [payments.collectionScheduleId],
     references: [collectionSchedules.id],
   }),
+  collectionCycle: one(collectionCycles, {
+    fields: [payments.collectionCycleId],
+    references: [collectionCycles.id],
+  }),
   createdBy: one(users, {
     fields: [payments.createdByUserId],
     references: [users.id],
@@ -444,6 +576,10 @@ export const paymentPromisesRelations = relations(
     collectionSchedule: one(collectionSchedules, {
       fields: [paymentPromises.collectionScheduleId],
       references: [collectionSchedules.id],
+    }),
+    collectionCycle: one(collectionCycles, {
+      fields: [paymentPromises.collectionCycleId],
+      references: [collectionCycles.id],
     }),
     reminders: many(reminders),
   }),

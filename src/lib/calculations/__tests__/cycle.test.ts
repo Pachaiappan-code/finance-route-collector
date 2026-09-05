@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   calculateNextCollectionDate,
+  currentCycleMonth,
   dayOfWeekName,
   getDayOfWeek,
+  resolveInitialCycleMonth,
   toCalendarDate,
 } from "../cycle";
 
@@ -58,5 +60,31 @@ describe("getDayOfWeek / dayOfWeekName", () => {
   it("rejects out-of-range day indices", () => {
     expect(() => dayOfWeekName(7)).toThrow();
     expect(() => dayOfWeekName(-1)).toThrow();
+  });
+});
+
+describe("monthly collection cycle helpers", () => {
+  beforeEach(() => {
+    // 5 September 2026, 10:00 IST
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-05T04:30:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("currentCycleMonth returns the first of the current calendar month", () => {
+    expect(currentCycleMonth()).toBe("2026-09-01");
+  });
+
+  it("resolveInitialCycleMonth uses the current month when the loan starts today or in the past", () => {
+    expect(resolveInitialCycleMonth("2026-09-05")).toBe("2026-09-01");
+    expect(resolveInitialCycleMonth("2026-08-15")).toBe("2026-09-01");
+  });
+
+  it("resolveInitialCycleMonth uses the loan's start month when it is in the future", () => {
+    expect(resolveInitialCycleMonth("2026-10-01")).toBe("2026-10-01");
+    expect(resolveInitialCycleMonth("2027-01-20")).toBe("2027-01-01");
   });
 });

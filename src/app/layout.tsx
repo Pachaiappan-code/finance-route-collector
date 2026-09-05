@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeScript } from "@/components/theme-script";
+import { NativeSystemBars } from "@/components/native-system-bars";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,6 +19,15 @@ export const metadata: Metadata = {
   description: "Easwar Finance — finance route collection & lending management",
 };
 
+// viewport-fit=cover lets a modern Android WebView report real safe-area
+// insets via env(); see src/components/native-system-bars.tsx and
+// node_modules/@capacitor/core/system-bars.md for the full picture.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
@@ -29,6 +39,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ThemeScript />
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        <NativeSystemBars />
         {children}
       </body>
     </html>

@@ -1,29 +1,20 @@
 import { notFound } from "next/navigation";
-import { Phone } from "lucide-react";
+import Link from "next/link";
+import { Phone, RefreshCw } from "lucide-react";
 import { auth } from "@/lib/auth/config";
 import { getCustomerById } from "@/lib/db/queries/customers";
-import { getCustomerHistory } from "@/lib/db/queries/customer-history";
+import { getCustomerLoanHistory } from "@/lib/db/queries/customer-history";
+import { ensureCurrentMonthCycles } from "@/lib/db/queries/ensure-cycles";
+import { currentCycleMonth } from "@/lib/calculations/cycle";
 import { formatCurrency } from "@/lib/utils/format";
+import { formatDisplayDate, formatMonthLabel } from "@/lib/utils/date";
 import { toggleCustomerActive } from "../actions";
+import { AddPaymentForm, PaymentRowItem, PromiseRowItem, SetReminderForm } from "./payment-panel";
 
-const STATUS_LABEL: Record<string, string> = {
-  pending: "Pending",
-  paid: "Paid",
-  partial: "Partial",
-  due: "Due",
-  rescheduled: "Rescheduled",
-  cancelled: "Cancelled",
-  overdue: "Overdue",
-};
-
-const STATUS_STYLE: Record<string, string> = {
-  pending: "bg-border/60 text-muted",
+const CYCLE_STATUS_STYLE: Record<string, string> = {
+  unpaid: "bg-border/60 text-muted",
   paid: "bg-success-soft text-success",
   partial: "bg-warning-soft text-warning",
-  due: "bg-danger-soft text-danger",
-  rescheduled: "bg-info-soft text-info",
-  cancelled: "bg-border/60 text-muted",
-  overdue: "bg-danger-soft text-danger",
 };
 
 function initials(name: string) {
@@ -45,7 +36,17 @@ export default async function CustomerDetailPage({
   const customer = await getCustomerById(session!.user.businessId, id);
   if (!customer) notFound();
 
-  const history = await getCustomerHistory(id);
+  const cycleMonth = currentCycleMonth();
+  await ensureCurrentMonthCycles(session!.user.businessId, cycleMonth);
+
+  const loanHistory = await getCustomerLoanHistory(id);
+  const primaryLoan = loanHistory[0] ?? null;
+  const currentCycleEntry = primaryLoan?.cycles.find((c) => c.cycle.cycleMonth === cycleMonth);
+  const currentCycle = currentCycleEntry?.cycle;
+  const remaining = currentCycle
+    ? Math.max(Number(currentCycle.expectedAmount) - Number(currentCycle.paidAmount), 0)
+    : 0;
+  const activePromise = currentCycleEntry?.promises.find((p) => p.status === "pending");
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-5">
@@ -61,10 +62,7 @@ export default async function CustomerDetailPage({
             <p className="text-sm text-muted">
               {customer.customerCode} · {customer.routeName}
             </p>
-            <a
-              href={`tel:${customer.phone}`}
-              className="flex items-center gap-1 text-sm text-muted"
-            >
+            <a href={`tel:${customer.phone}`} className="flex items-center gap-1 text-sm text-muted">
               <Phone size={12} /> {customer.phone}
             </a>
           </div>
@@ -81,15 +79,6 @@ export default async function CustomerDetailPage({
         </form>
       </div>
 
-      <section className="grid grid-cols-2 gap-3">
-        <InfoCard label="Principal" value={formatCurrency(Number(customer.principalAmount))} />
-        <InfoCard label="Interest" value={formatCurrency(Number(customer.interestAmount))} />
-        <InfoCard label="Total repayment" value={formatCurrency(Number(customer.totalRepaymentAmount))} />
-        <InfoCard label="Outstanding" value={formatCurrency(Number(customer.outstandingAmount))} highlight />
-        <InfoCard label="Per-cycle collection" value={formatCurrency(Number(customer.collectionAmount))} />
-        <InfoCard label="Cycle" value={`${customer.cycleDays} days`} />
-      </section>
-
       {customer.address && (
         <section>
           <h2 className="mb-1 text-sm font-medium text-muted">Address</h2>
@@ -104,41 +93,183 @@ export default async function CustomerDetailPage({
         </section>
       )}
 
-      <section>
-        <h2 className="mb-2 text-sm font-medium text-muted">History</h2>
-        <div className="flex flex-col gap-2">
-          {history.length === 0 && (
-            <p className="text-sm text-muted">No collection history yet.</p>
+      {!primaryLoan && (
+        <p className="rounded-2xl border border-border bg-surface p-4 text-sm text-muted">
+          No loan on record for this customer yet.
+        </p>
+      )}
+
+      {primaryLoan && (
+        <>
+          <section>
+            <h2 className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
+              Loan details
+            </h2>
+            <div className="grid grid-cols-2 gap-3">
+              <InfoCard label="Principal" value={formatCurrency(Number(primaryLoan.loan.principalAmount))} />
+              <InfoCard label="Interest" value={formatCurrency(Number(primaryLoan.loan.interestAmount))} />
+              <InfoCard label="Total payable" value={formatCurrency(Number(primaryLoan.loan.totalPayableAmount))} />
+              <InfoCard label="Monthly amount" value={formatCurrency(Number(primaryLoan.loan.monthlyAmount))} />
+              <InfoCard label="Start date" value={formatDisplayDate(primaryLoan.loan.startDate)} />
+              <InfoCard
+                label="Loan status"
+                value={primaryLoan.loan.status === "active" ? "Active" : "Completed"}
+                highlight={primaryLoan.loan.status === "completed"}
+              />
+            </div>
+            {primaryLoan.loan.status === "completed" && (
+              <Link
+                href={`/customers/${id}/reloan`}
+                className="mt-3 flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-navy text-sm font-medium text-white shadow-sm dark:bg-brand-navy-strong"
+              >
+                <RefreshCw size={15} /> Re-loan
+              </Link>
+            )}
+          </section>
+
+          {currentCycle && (
+            <section>
+              <h2 className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                {formatMonthLabel(cycleMonth)} collection
+              </h2>
+              <div className="rounded-2xl border border-border bg-surface p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted">Status</p>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${CYCLE_STATUS_STYLE[currentCycle.status]}`}
+                  >
+                    {currentCycle.status}
+                  </span>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    <p className="text-xs text-muted">Expected</p>
+                    <p className="font-medium text-foreground">
+                      {formatCurrency(Number(currentCycle.expectedAmount))}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted">Paid</p>
+                    <p className="font-medium text-success">
+                      {formatCurrency(Number(currentCycle.paidAmount))}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted">Remaining</p>
+                    <p className="font-medium text-danger">{formatCurrency(remaining)}</p>
+                  </div>
+                </div>
+
+                {activePromise && (
+                  <div className="mt-3">
+                    <PromiseRowItem
+                      promise={{
+                        id: activePromise.id,
+                        promisedDate: activePromise.promisedDate,
+                        promisedTime: activePromise.promisedTime,
+                        promisedAmount: activePromise.promisedAmount,
+                        status: activePromise.status,
+                      }}
+                    />
+                  </div>
+                )}
+
+                {currentCycle.status !== "paid" && (
+                  <div className="mt-3 flex gap-2">
+                    <AddPaymentForm cycleId={currentCycle.id} remaining={remaining} />
+                    {!activePromise && (
+                      <SetReminderForm cycleId={currentCycle.id} remaining={remaining} />
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
           )}
-          {history.map(({ schedule, payments, promises }) => (
-            <div
-              key={schedule.id}
-              className="rounded-2xl border border-border bg-surface p-4"
-            >
+        </>
+      )}
+
+      <section>
+        <h2 className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
+          Loan &amp; payment history
+        </h2>
+        <div className="flex flex-col gap-4">
+          {loanHistory.map(({ loan, cycles }, loanIndex) => (
+            <div key={loan.id} className="rounded-2xl border border-border bg-surface p-4">
               <div className="flex items-center justify-between">
-                <p className="font-medium text-foreground">
-                  {schedule.scheduledDate}
+                <p className="text-sm font-semibold text-foreground">
+                  Loan #{loanHistory.length - loanIndex}
+                  {loanIndex === 0 && (
+                    <span className="ml-2 rounded-full bg-info-soft px-2 py-0.5 text-xs font-medium text-info">
+                      Current
+                    </span>
+                  )}
                 </p>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[schedule.status]}`}
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
+                    loan.status === "completed" ? "bg-success-soft text-success" : "bg-info-soft text-info"
+                  }`}
                 >
-                  {STATUS_LABEL[schedule.status]}
+                  {loan.status}
                 </span>
               </div>
-              <p className="text-sm text-muted">
-                Expected {formatCurrency(Number(schedule.expectedAmount))} · Cycle #{schedule.cycleNumber}
+              <p className="mt-1 text-xs text-muted">
+                {formatCurrency(Number(loan.principalAmount))} principal ·{" "}
+                {formatCurrency(Number(loan.monthlyAmount))}/month · started{" "}
+                {formatDisplayDate(loan.startDate)}
               </p>
-              {payments.map((p) => (
-                <p key={p.id} className="mt-1 text-sm font-medium text-success">
-                  Paid {formatCurrency(Number(p.amount))} on {p.paymentDate} ({p.paymentMethod})
-                </p>
-              ))}
-              {promises.map((pr) => (
-                <p key={pr.id} className="mt-1 text-sm font-medium text-warning">
-                  Promised {pr.promisedDate} {pr.promisedTime ?? ""}
-                  {pr.promisedAmount ? ` · ${formatCurrency(Number(pr.promisedAmount))}` : ""}
-                </p>
-              ))}
+
+              <div className="mt-3 flex flex-col gap-2.5">
+                {cycles.length === 0 && (
+                  <p className="text-xs text-muted">No collection cycles yet.</p>
+                )}
+                {cycles.map(({ cycle, payments, promises }) => (
+                  <div key={cycle.id} className="rounded-xl border border-border p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-foreground">
+                        {formatMonthLabel(cycle.cycleMonth)}
+                      </p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${CYCLE_STATUS_STYLE[cycle.status]}`}
+                      >
+                        {cycle.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted">
+                      Expected {formatCurrency(Number(cycle.expectedAmount))} · Paid{" "}
+                      {formatCurrency(Number(cycle.paidAmount))}
+                    </p>
+                    {payments.length > 0 && (
+                      <div className="mt-2 flex flex-col gap-1.5">
+                        {payments.map((p) => (
+                          <PaymentRowItem
+                            key={p.id}
+                            payment={{
+                              id: p.id,
+                              amount: p.amount,
+                              paymentDate: p.paymentDate,
+                              paymentMethod: p.paymentMethod,
+                              notes: p.notes,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {promises.map((pr) => (
+                      <div key={pr.id} className="mt-2">
+                        <PromiseRowItem
+                          promise={{
+                            id: pr.id,
+                            promisedDate: pr.promisedDate,
+                            promisedTime: pr.promisedTime,
+                            promisedAmount: pr.promisedAmount,
+                            status: pr.status,
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
@@ -159,15 +290,11 @@ function InfoCard({
   return (
     <div
       className={`rounded-2xl border p-3.5 ${
-        highlight
-          ? "border-brand-navy/20 bg-info-soft"
-          : "border-border bg-surface"
+        highlight ? "border-brand-navy/20 bg-info-soft" : "border-border bg-surface"
       }`}
     >
       <p className="text-xs text-muted">{label}</p>
-      <p
-        className={`mt-0.5 text-base font-semibold ${highlight ? "text-info" : "text-foreground"}`}
-      >
+      <p className={`mt-0.5 text-base font-semibold ${highlight ? "text-info" : "text-foreground"}`}>
         {value}
       </p>
     </div>

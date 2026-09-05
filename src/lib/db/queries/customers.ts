@@ -25,8 +25,17 @@ export async function listCustomers(businessId: string, search?: string) {
       phone: customers.phone,
       area: customers.area,
       isActive: customers.isActive,
-      outstandingAmount: customers.outstandingAmount,
       routeName: routes.name,
+      // Outstanding = active loans' total payable minus everything ever paid against them.
+      // The inner cycle-paid subquery is correlated per-loan (not joined) so a loan with
+      // several monthly cycles doesn't get its total_payable_amount counted more than once.
+      outstandingAmount: sql<string>`coalesce((
+        select sum(l.total_payable_amount - coalesce((
+          select sum(cc.paid_amount) from collection_cycles cc where cc.loan_id = l.id
+        ), 0))
+        from loans l
+        where l.customer_id = ${customers.id} and l.status = 'active'
+      ), 0)`,
     })
     .from(customers)
     .innerJoin(routes, eq(customers.routeId, routes.id))
@@ -47,13 +56,6 @@ export async function getCustomerById(businessId: string, customerId: string) {
       routeId: customers.routeId,
       routeName: routes.name,
       routeSequence: customers.routeSequence,
-      principalAmount: customers.principalAmount,
-      interestAmount: customers.interestAmount,
-      totalRepaymentAmount: customers.totalRepaymentAmount,
-      collectionAmount: customers.collectionAmount,
-      outstandingAmount: customers.outstandingAmount,
-      cycleDays: customers.cycleDays,
-      startDate: customers.startDate,
       isActive: customers.isActive,
       notes: customers.notes,
     })

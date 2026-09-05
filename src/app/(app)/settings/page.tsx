@@ -90,9 +90,7 @@ export default async function SettingsPage() {
               className={inputClass}
             >
               <option value="cash">Cash</option>
-              <option value="upi">UPI</option>
-              <option value="bank_transfer">Bank transfer</option>
-              <option value="other">Other</option>
+              <option value="gpay">GPay</option>
             </select>
           </div>
           <button

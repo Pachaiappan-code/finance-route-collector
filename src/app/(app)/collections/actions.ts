@@ -1,22 +1,16 @@
 "use server";
 
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth/config";
 import { db } from "@/lib/db";
+import { collectionCycles, paymentPromises, payments, reminders } from "@/lib/db/schema";
 import {
-  collectionSchedules,
-  customers,
-  paymentPromises,
-  payments,
-  reminders,
-} from "@/lib/db/schema";
-import {
-  calculateNextCollectionDate,
-  toCalendarDate,
-} from "@/lib/calculations/cycle";
-import { recordDueSchema, recordPaymentSchema } from "@/lib/validation/collection";
-import { getPaidTotalForSchedule, getScheduleForCollection } from "@/lib/db/queries/collections";
+  editPaymentSchema,
+  recordDueSchema,
+  recordPaymentSchema,
+} from "@/lib/validation/collection";
+import { getCycleById } from "@/lib/db/queries/cycles";
 
 const REMINDER_OFFSET_MINUTES: Record<string, number> = {
   "15_min_before": 15,
@@ -33,59 +27,37 @@ async function requireBusinessId(): Promise<string> {
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-/**
- * Generates the next collection schedule for a customer, but only when the
- * schedule just settled is the customer's most recent one — paying off an
- * old overdue schedule out of order must not fork the cycle chain, and a
- * second call for the same date must not create a duplicate.
- */
-async function maybeGenerateNextSchedule(
-  tx: Tx,
-  customerId: string,
-  routeId: string,
-  cycleDays: number,
-  settledScheduleDate: string,
-  settledCycleNumber: number,
-  expectedAmount: string,
-) {
-  const [{ maxDate }] = await tx
-    .select({ maxDate: sql<string>`max(${collectionSchedules.scheduledDate})` })
-    .from(collectionSchedules)
-    .where(eq(collectionSchedules.customerId, customerId));
-
-  if (maxDate !== settledScheduleDate) return;
-
-  const nextDate = toCalendarDate(
-    calculateNextCollectionDate(new Date(`${settledScheduleDate}T00:00:00`), cycleDays),
-  );
-
-  const [existing] = await tx
-    .select({ id: collectionSchedules.id })
-    .from(collectionSchedules)
-    .where(
-      and(
-        eq(collectionSchedules.customerId, customerId),
-        eq(collectionSchedules.scheduledDate, nextDate),
-      ),
-    )
+/** Recomputes a cycle's cached paidAmount/status from its actual payment rows — the source of truth is always the payments table. */
+async function recomputeCycleStatus(tx: Tx, cycleId: string) {
+  const [cycle] = await tx
+    .select({ expectedAmount: collectionCycles.expectedAmount })
+    .from(collectionCycles)
+    .where(eq(collectionCycles.id, cycleId))
     .limit(1);
+  if (!cycle) return;
 
-  if (existing) return;
+  const [{ total }] = await tx
+    .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+    .from(payments)
+    .where(eq(payments.collectionCycleId, cycleId));
 
-  await tx.insert(collectionSchedules).values({
-    customerId,
-    routeId,
-    scheduledDate: nextDate,
-    expectedAmount,
-    cycleNumber: settledCycleNumber + 1,
-    status: "pending",
-  });
+  const paid = Number(total);
+  const expected = Number(cycle.expectedAmount);
+  const status = paid <= 0 ? "unpaid" : paid >= expected ? "paid" : "partial";
+
+  await tx
+    .update(collectionCycles)
+    .set({ paidAmount: String(paid), status, updatedAt: new Date() })
+    .where(eq(collectionCycles.id, cycleId));
+
+  return status;
 }
 
+/** Records a payment against a cycle. Used for full payment, partial payment, and adding another later payment — they're all the same operation. Amount and date are always freely editable by the user (payments are not restricted to the route's collection day). */
 export async function recordPayment(formData: FormData) {
   const businessId = await requireBusinessId();
   const parsed = recordPaymentSchema.safeParse({
-    scheduleId: formData.get("scheduleId"),
+    cycleId: formData.get("cycleId"),
     amount: formData.get("amount"),
     paymentDate: formData.get("paymentDate"),
     paymentTime: formData.get("paymentTime"),
@@ -98,8 +70,8 @@ export async function recordPayment(formData: FormData) {
   }
   const data = parsed.data;
 
-  const schedule = await getScheduleForCollection(businessId, data.scheduleId);
-  if (!schedule) throw new Error("Collection schedule not found");
+  const cycle = await getCycleById(businessId, data.cycleId);
+  if (!cycle) throw new Error("Collection cycle not found");
 
   const session = await auth();
 
@@ -112,8 +84,8 @@ export async function recordPayment(formData: FormData) {
     if (existingPayment) return;
 
     await tx.insert(payments).values({
-      customerId: schedule.customerId,
-      collectionScheduleId: schedule.scheduleId,
+      customerId: cycle.customerId,
+      collectionCycleId: cycle.id,
       amount: String(data.amount),
       paymentDate: data.paymentDate,
       paymentTime: data.paymentTime,
@@ -123,72 +95,103 @@ export async function recordPayment(formData: FormData) {
       createdByUserId: session!.user.id,
     });
 
-    const alreadyPaid = await getPaidTotalForSchedule(schedule.scheduleId);
-    const totalPaid = alreadyPaid + data.amount;
-    const expected = Number(schedule.expectedAmount);
-    const isFullyPaid = totalPaid >= expected;
+    const newStatus = await recomputeCycleStatus(tx, cycle.id);
 
-    await tx
-      .update(collectionSchedules)
-      .set({ status: isFullyPaid ? "paid" : "partial", updatedAt: new Date() })
-      .where(eq(collectionSchedules.id, schedule.scheduleId));
+    if (newStatus === "paid") {
+      // fully settling this month's cycle resolves any pending promise on it
+      await tx
+        .update(paymentPromises)
+        .set({ status: "completed", updatedAt: new Date() })
+        .where(
+          and(
+            eq(paymentPromises.collectionCycleId, cycle.id),
+            eq(paymentPromises.status, "pending"),
+          ),
+        );
 
-    await tx
-      .update(customers)
-      .set({
-        outstandingAmount: sql`greatest(${customers.outstandingAmount} - ${data.amount}, 0)`,
-        updatedAt: new Date(),
-      })
-      .where(eq(customers.id, schedule.customerId));
-
-    // completing a payment resolves any pending promise on this schedule
-    await tx
-      .update(paymentPromises)
-      .set({ status: "completed", updatedAt: new Date() })
-      .where(
-        and(
-          eq(paymentPromises.collectionScheduleId, schedule.scheduleId),
-          eq(paymentPromises.status, "pending"),
-        ),
-      );
-
-    await tx
-      .update(reminders)
-      .set({ status: "completed", updatedAt: new Date() })
-      .where(
-        and(
-          eq(reminders.customerId, schedule.customerId),
-          eq(reminders.status, "scheduled"),
-          sql`${reminders.paymentPromiseId} in (
-            select id from ${paymentPromises}
-            where ${paymentPromises.collectionScheduleId} = ${schedule.scheduleId}
-          )`,
-        ),
-      );
-
-    if (isFullyPaid) {
-      await maybeGenerateNextSchedule(
-        tx,
-        schedule.customerId,
-        schedule.routeId,
-        schedule.cycleDays,
-        schedule.scheduledDate,
-        schedule.cycleNumber,
-        schedule.expectedAmount,
-      );
+      await tx
+        .update(reminders)
+        .set({ status: "completed", updatedAt: new Date() })
+        .where(
+          and(
+            eq(reminders.customerId, cycle.customerId),
+            eq(reminders.status, "scheduled"),
+            sql`${reminders.paymentPromiseId} in (
+              select id from ${paymentPromises}
+              where ${paymentPromises.collectionCycleId} = ${cycle.id}
+            )`,
+          ),
+        );
     }
   });
 
   revalidatePath("/collections");
   revalidatePath("/dashboard");
   revalidatePath("/due");
-  revalidatePath(`/customers/${schedule.customerId}`);
+  revalidatePath("/reports");
+  revalidatePath(`/customers/${cycle.customerId}`);
+}
+
+/** Edits an existing payment's amount/date/method/notes in place. Payment history stays fully editable — nothing is locked. */
+export async function editPayment(formData: FormData) {
+  const businessId = await requireBusinessId();
+  const parsed = editPaymentSchema.safeParse({
+    paymentId: formData.get("paymentId"),
+    amount: formData.get("amount"),
+    paymentDate: formData.get("paymentDate"),
+    paymentMethod: formData.get("paymentMethod"),
+    notes: formData.get("notes") ?? "",
+  });
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
+  }
+  const data = parsed.data;
+
+  const [payment] = await db
+    .select({
+      id: payments.id,
+      customerId: payments.customerId,
+      collectionCycleId: payments.collectionCycleId,
+    })
+    .from(payments)
+    .where(eq(payments.id, data.paymentId))
+    .limit(1);
+  if (!payment) throw new Error("Payment not found");
+
+  // Confirm the payment belongs to this business via its cycle.
+  if (payment.collectionCycleId) {
+    const cycle = await getCycleById(businessId, payment.collectionCycleId);
+    if (!cycle) throw new Error("Payment not found");
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(payments)
+      .set({
+        amount: String(data.amount),
+        paymentDate: data.paymentDate,
+        paymentMethod: data.paymentMethod,
+        notes: data.notes || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(payments.id, data.paymentId));
+
+    if (payment.collectionCycleId) {
+      await recomputeCycleStatus(tx, payment.collectionCycleId);
+    }
+  });
+
+  revalidatePath("/collections");
+  revalidatePath("/dashboard");
+  revalidatePath("/due");
+  revalidatePath("/reports");
+  revalidatePath(`/customers/${payment.customerId}`);
 }
 
 export async function recordDue(formData: FormData) {
   const businessId = await requireBusinessId();
   const parsed = recordDueSchema.safeParse({
-    scheduleId: formData.get("scheduleId"),
+    cycleId: formData.get("cycleId"),
     reason: formData.get("reason") ?? "",
     promisedDate: formData.get("promisedDate"),
     promisedTime: formData.get("promisedTime"),
@@ -201,20 +204,15 @@ export async function recordDue(formData: FormData) {
   }
   const data = parsed.data;
 
-  const schedule = await getScheduleForCollection(businessId, data.scheduleId);
-  if (!schedule) throw new Error("Collection schedule not found");
+  const cycle = await getCycleById(businessId, data.cycleId);
+  if (!cycle) throw new Error("Collection cycle not found");
 
   await db.transaction(async (tx) => {
-    await tx
-      .update(collectionSchedules)
-      .set({ status: "due", updatedAt: new Date() })
-      .where(eq(collectionSchedules.id, schedule.scheduleId));
-
     const [promise] = await tx
       .insert(paymentPromises)
       .values({
-        customerId: schedule.customerId,
-        collectionScheduleId: schedule.scheduleId,
+        customerId: cycle.customerId,
+        collectionCycleId: cycle.id,
         promisedDate: data.promisedDate,
         promisedTime: data.promisedTime,
         promisedAmount:
@@ -230,7 +228,7 @@ export async function recordDue(formData: FormData) {
     const scheduledAt = new Date(promiseDateTime.getTime() - offsetMinutes * 60_000);
 
     await tx.insert(reminders).values({
-      customerId: schedule.customerId,
+      customerId: cycle.customerId,
       paymentPromiseId: promise.id,
       scheduledAt,
       reminderType: data.reminderOffset,
@@ -242,7 +240,7 @@ export async function recordDue(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/due");
   revalidatePath("/reminders");
-  revalidatePath(`/customers/${schedule.customerId}`);
+  revalidatePath(`/customers/${cycle.customerId}`);
 }
 
 export async function cancelPromiseAndReminder(promiseId: string) {

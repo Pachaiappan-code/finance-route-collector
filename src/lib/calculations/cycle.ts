@@ -49,3 +49,20 @@ export function dayOfWeekName(dayOfWeek: number): string {
   }
   return DAY_NAMES[dayOfWeek];
 }
+
+/** The current calendar month as a "YYYY-MM-01" date string, in business timezone. */
+export function currentCycleMonth(): string {
+  return `${toCalendarDate(new Date()).slice(0, 7)}-01`;
+}
+
+/**
+ * Which monthly collection_cycles row a new (or re-)loan's first cycle
+ * belongs to: the current month, unless the loan's start date is in a
+ * future month, in which case collection begins that month instead.
+ * Plain string comparison — no Date/timezone arithmetic, no shift risk.
+ */
+export function resolveInitialCycleMonth(startDate: string): string {
+  const startMonth = startDate.slice(0, 7);
+  const todayMonth = toCalendarDate(new Date()).slice(0, 7);
+  return `${startMonth > todayMonth ? startMonth : todayMonth}-01`;
+}

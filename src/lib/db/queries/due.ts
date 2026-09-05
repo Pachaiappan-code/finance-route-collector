@@ -1,59 +1,55 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { collectionSchedules, customers, paymentPromises, routes } from "@/lib/db/schema";
+import { collectionCycles, customers, paymentPromises, routes } from "@/lib/db/schema";
 
-export async function listDueCustomers(businessId: string) {
+/** Follow-up list: every customer whose CURRENT month cycle is partial or unpaid, across all routes. */
+export async function listDueCustomers(businessId: string, cycleMonth: string) {
   const rows = await db
     .select({
-      scheduleId: collectionSchedules.id,
-      scheduledDate: collectionSchedules.scheduledDate,
-      status: collectionSchedules.status,
-      expectedAmount: collectionSchedules.expectedAmount,
+      cycleId: collectionCycles.id,
+      cycleMonth: collectionCycles.cycleMonth,
+      status: collectionCycles.status,
+      expectedAmount: collectionCycles.expectedAmount,
+      paidAmount: collectionCycles.paidAmount,
       customerId: customers.id,
       customerName: customers.name,
       customerPhone: customers.phone,
       routeName: routes.name,
     })
-    .from(collectionSchedules)
-    .innerJoin(customers, eq(collectionSchedules.customerId, customers.id))
-    .innerJoin(routes, eq(collectionSchedules.routeId, routes.id))
+    .from(collectionCycles)
+    .innerJoin(customers, eq(collectionCycles.customerId, customers.id))
+    .innerJoin(routes, eq(collectionCycles.routeId, routes.id))
     .where(
       and(
         eq(customers.businessId, businessId),
-        inArray(collectionSchedules.status, ["due", "partial", "overdue", "pending"]),
+        eq(collectionCycles.cycleMonth, cycleMonth),
+        inArray(collectionCycles.status, ["partial", "unpaid"]),
       ),
     )
-    .orderBy(asc(collectionSchedules.scheduledDate));
+    .orderBy(asc(customers.name));
 
-  const scheduleIds = rows.map((r) => r.scheduleId);
-  const promises = scheduleIds.length
+  const cycleIds = rows.map((r) => r.cycleId);
+  const promises = cycleIds.length
     ? await db
         .select()
         .from(paymentPromises)
         .where(
           and(
-            inArray(paymentPromises.collectionScheduleId, scheduleIds),
+            inArray(paymentPromises.collectionCycleId, cycleIds),
             eq(paymentPromises.status, "pending"),
           ),
         )
     : [];
 
-  const promiseBySchedule = new Map(promises.map((p) => [p.collectionScheduleId, p]));
-
-  const today = new Date().toISOString().slice(0, 10);
+  const promiseByCycle = new Map(
+    promises.filter((p) => p.collectionCycleId).map((p) => [p.collectionCycleId as string, p]),
+  );
 
   return rows
-    .filter((r) => r.status !== "pending" || r.scheduledDate < today)
     .map((r) => ({
       ...r,
-      promise: promiseBySchedule.get(r.scheduleId) ?? null,
-      overdueDays: Math.max(
-        0,
-        Math.floor(
-          (new Date(today).getTime() - new Date(r.scheduledDate).getTime()) /
-            86_400_000,
-        ),
-      ),
+      remaining: Math.max(Number(r.expectedAmount) - Number(r.paidAmount), 0),
+      promise: promiseByCycle.get(r.cycleId) ?? null,
     }))
-    .sort((a, b) => b.overdueDays - a.overdueDays);
+    .sort((a, b) => b.remaining - a.remaining);
 }

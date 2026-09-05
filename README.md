@@ -1,20 +1,24 @@
 # EMF Collections — Finance Route Collection & Lending Management
 
-A production-oriented app for a business that lends money and collects
-repayments (including interest) along recurring collection routes. Built
-around the workflow:
+A production app for a business that lends money and collects monthly
+repayments (including interest) along three fixed collection routes —
+Sunday, Monday, and Tuesday. Built around the workflow:
 
-**Route → Customer → Expected Collection → Paid / Due / Partial →
-Promise Date & Time → Reminder → Payment → Next Collection Cycle**
+**Customer → Loan → Monthly Collection Cycle → Paid / Partial / Unpaid →
+Promise Date & Time → Reminder → Payment (editable, any time) → next
+month's cycle → Re-loan when a loan completes**
 
-Full spec: [`Finance Route Collection App — Locked Claude Code Master
+Original spec: [`Finance Route Collection App — Locked Claude Code Master
 Prompt.md`](./Finance%20Route%20Collection%20App%20%E2%80%94%20Locked%20Claude%20Code%20Master%20Prompt.md).
+The business model was later changed from weekly/N-day cycles to monthly —
+see [docs/architecture.md](./docs/architecture.md) and
+[docs/database.md](./docs/database.md) for the current model.
 
 ## Stack
 
 Next.js (App Router + Server Actions) · TypeScript · Tailwind CSS ·
 Drizzle ORM · Neon PostgreSQL · Auth.js (credentials) · Vercel · Capacitor
-(Android, deferred — see [docs/android-build.md](./docs/android-build.md)).
+8 (Android, built on GitHub Actions — see [docs/android-build.md](./docs/android-build.md)).
 
 ## Local setup
 
@@ -32,34 +36,40 @@ does and where it's allowed to live.
 ## Testing
 
 ```bash
-npx vitest run   # business-logic unit tests (cycle date math, etc.)
-npm run build    # production build + typecheck
+npx vitest run       # business-logic unit tests (cycle/monthly date math)
+npx eslint .          # lint
+npm run build         # production build + typecheck
 ```
 
 ## Documentation
 
 | Doc | Covers |
 |---|---|
-| [docs/architecture.md](./docs/architecture.md) | System design, directory layout, the core Paid/Due/Partial + next-cycle logic |
-| [docs/database.md](./docs/database.md) | Schema, indexes, migrations, the Neon driver split |
+| [docs/architecture.md](./docs/architecture.md) | System design, directory layout, the monthly collection/loan/cycle logic |
+| [docs/database.md](./docs/database.md) | Schema (loans, collection_cycles, deprecated tables), indexes, migrations, the Neon driver split |
 | [docs/environment.md](./docs/environment.md) | Every env var, dev vs. prod separation |
 | [docs/deployment.md](./docs/deployment.md) | Vercel + Neon deployment steps and verification |
-| [docs/android-build.md](./docs/android-build.md) | Capacitor/Android setup (not yet started — SDK not installed) |
+| [docs/android-build.md](./docs/android-build.md) | Capacitor/Android setup, GitHub Actions APK builds, status/nav bar fix |
 | [docs/notifications.md](./docs/notifications.md) | Reminder/promise model and the required device-sync design |
 | [docs/maintenance.md](./docs/maintenance.md) | Day-to-day dev tasks: migrations, deploys, version bumps |
 | [docs/troubleshooting.md](./docs/troubleshooting.md) | Known gotchas hit during development, with the actual fix |
 
 ## Status
 
-Web app (Phases 0–8 of the spec) is implemented and verified end-to-end in
-a real browser: auth, routes, customers, collection schedules, the
-Paid/Due/Partial collection-mode screen, next-cycle generation, payment
-promises + reminders, due list, reports, CSV export, settings. Deployed to
-Vercel production, verified with a real login + database round trip.
-Light/dark theme (user-selectable) and branded design built on the EMF
-logo. Android is a Capacitor WebView shell around the same production
-site — no local SDK needed, it builds on GitHub Actions
-(`.github/workflows/android-build.yml`); see
+Web app implemented and verified end-to-end in a real browser on the
+**monthly** collection model: auth, three fixed routes, customers with
+multiple loans (re-loan), monthly collection cycles, dashboard
+Paid/Partial/Unpaid → route drilldown, collection-mode screen, fully
+editable payment history (add/edit, Cash or GPay, notes), payment
+promises + reminders, follow-up (due) list, reports with from/to date
+range + route/status/method filters, CSV export, DD/MM/YYYY dates
+throughout, settings, light/dark theme, branded design. Deployed to
+Vercel production, verified with real login + database round trips.
+Android is a Capacitor 8 WebView shell around the same production site —
+no local SDK needed, it builds on GitHub Actions
+(`.github/workflows/android-build.yml`), including a fix for the
+edge-to-edge status/navigation bar; see
 [docs/android-build.md](./docs/android-build.md) for how to grab the APK
 and send it to a client. Offline support and Android push notifications
-(Phase 9/7) are not yet built.
+are not yet built (reminders are recorded and manageable, but nothing
+pings the device yet — see [docs/notifications.md](./docs/notifications.md)).
