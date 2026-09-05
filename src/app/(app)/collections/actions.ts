@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth/config";
 import { db } from "@/lib/db";
@@ -53,47 +53,77 @@ async function recomputeCycleStatus(tx: Tx, cycleId: string) {
   return status;
 }
 
-/** Records a payment against a cycle. Used for full payment, partial payment, and adding another later payment — they're all the same operation. Amount and date are always freely editable by the user (payments are not restricted to the route's collection day). */
-export async function recordPayment(formData: FormData) {
+/**
+ * Records a payment against a cycle. Used for full payment, partial payment,
+ * and adding another later payment — they're all the same operation. Amount
+ * and date are always freely editable by the user (payments are not
+ * restricted to the route's collection day).
+ *
+ * A single entry can be split across cash and GPay (most customers pay this
+ * way) — each non-zero side becomes its own payment row, since a payment row
+ * always has exactly one method. Both rows share one clientRequestId base
+ * (suffixed per method) so a retried submission can't double-insert either
+ * side.
+ *
+ * Returns `{ error }` instead of throwing for expected failures — Next.js
+ * strips thrown Server Action error messages in production builds, so any
+ * message the user actually needs to see must come back as data, not a throw.
+ */
+export async function recordPayment(formData: FormData): Promise<{ error?: string }> {
   const businessId = await requireBusinessId();
   const parsed = recordPaymentSchema.safeParse({
     cycleId: formData.get("cycleId"),
-    amount: formData.get("amount"),
+    cashAmount: formData.get("cashAmount") || 0,
+    gpayAmount: formData.get("gpayAmount") || 0,
     paymentDate: formData.get("paymentDate"),
     paymentTime: formData.get("paymentTime"),
-    paymentMethod: formData.get("paymentMethod"),
     notes: formData.get("notes") ?? "",
     clientRequestId: formData.get("clientRequestId"),
   });
   if (!parsed.success) {
-    throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
+    return { error: parsed.error.issues.map((i) => i.message).join(", ") };
   }
   const data = parsed.data;
 
   const cycle = await getCycleById(businessId, data.cycleId);
-  if (!cycle) throw new Error("Collection cycle not found");
+  if (!cycle) return { error: "Collection cycle not found" };
 
   const session = await auth();
 
-  await db.transaction(async (tx) => {
-    const [existingPayment] = await tx
-      .select({ id: payments.id })
-      .from(payments)
-      .where(eq(payments.clientRequestId, data.clientRequestId))
-      .limit(1);
-    if (existingPayment) return;
+  const splits: { method: "cash" | "gpay"; amount: number; clientRequestId: string }[] = [];
+  if (data.cashAmount > 0) {
+    splits.push({ method: "cash", amount: data.cashAmount, clientRequestId: `${data.clientRequestId}:cash` });
+  }
+  if (data.gpayAmount > 0) {
+    splits.push({ method: "gpay", amount: data.gpayAmount, clientRequestId: `${data.clientRequestId}:gpay` });
+  }
 
-    await tx.insert(payments).values({
-      customerId: cycle.customerId,
-      collectionCycleId: cycle.id,
-      amount: String(data.amount),
-      paymentDate: data.paymentDate,
-      paymentTime: data.paymentTime,
-      paymentMethod: data.paymentMethod,
-      notes: data.notes || null,
-      clientRequestId: data.clientRequestId,
-      createdByUserId: session!.user.id,
-    });
+  await db.transaction(async (tx) => {
+    const existing = await tx
+      .select({ clientRequestId: payments.clientRequestId })
+      .from(payments)
+      .where(
+        inArray(
+          payments.clientRequestId,
+          splits.map((s) => s.clientRequestId),
+        ),
+      );
+    const alreadyInserted = new Set(existing.map((e) => e.clientRequestId));
+
+    for (const split of splits) {
+      if (alreadyInserted.has(split.clientRequestId)) continue;
+      await tx.insert(payments).values({
+        customerId: cycle.customerId,
+        collectionCycleId: cycle.id,
+        amount: String(split.amount),
+        paymentDate: data.paymentDate,
+        paymentTime: data.paymentTime,
+        paymentMethod: split.method,
+        notes: data.notes || null,
+        clientRequestId: split.clientRequestId,
+        createdByUserId: session!.user.id,
+      });
+    }
 
     const newStatus = await recomputeCycleStatus(tx, cycle.id);
 
@@ -130,10 +160,18 @@ export async function recordPayment(formData: FormData) {
   revalidatePath("/due");
   revalidatePath("/reports");
   revalidatePath(`/customers/${cycle.customerId}`);
+  return {};
 }
 
-/** Edits an existing payment's amount/date/method/notes in place. Payment history stays fully editable — nothing is locked. */
-export async function editPayment(formData: FormData) {
+/**
+ * Edits an existing payment's amount/date/method/notes in place. Payment
+ * history stays fully editable — nothing is locked.
+ *
+ * Returns `{ error }` instead of throwing for expected failures — Next.js
+ * strips thrown Server Action error messages in production builds, so any
+ * message the user actually needs to see must come back as data, not a throw.
+ */
+export async function editPayment(formData: FormData): Promise<{ error?: string }> {
   const businessId = await requireBusinessId();
   const parsed = editPaymentSchema.safeParse({
     paymentId: formData.get("paymentId"),
@@ -143,7 +181,7 @@ export async function editPayment(formData: FormData) {
     notes: formData.get("notes") ?? "",
   });
   if (!parsed.success) {
-    throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
+    return { error: parsed.error.issues.map((i) => i.message).join(", ") };
   }
   const data = parsed.data;
 
@@ -156,12 +194,12 @@ export async function editPayment(formData: FormData) {
     .from(payments)
     .where(eq(payments.id, data.paymentId))
     .limit(1);
-  if (!payment) throw new Error("Payment not found");
+  if (!payment) return { error: "Payment not found" };
 
   // Confirm the payment belongs to this business via its cycle.
   if (payment.collectionCycleId) {
     const cycle = await getCycleById(businessId, payment.collectionCycleId);
-    if (!cycle) throw new Error("Payment not found");
+    if (!cycle) return { error: "Payment not found" };
   }
 
   await db.transaction(async (tx) => {
@@ -186,9 +224,15 @@ export async function editPayment(formData: FormData) {
   revalidatePath("/due");
   revalidatePath("/reports");
   revalidatePath(`/customers/${payment.customerId}`);
+  return {};
 }
 
-export async function recordDue(formData: FormData) {
+/**
+ * Returns `{ error }` instead of throwing for expected failures — Next.js
+ * strips thrown Server Action error messages in production builds, so any
+ * message the user actually needs to see must come back as data, not a throw.
+ */
+export async function recordDue(formData: FormData): Promise<{ error?: string }> {
   const businessId = await requireBusinessId();
   const parsed = recordDueSchema.safeParse({
     cycleId: formData.get("cycleId"),
@@ -200,12 +244,12 @@ export async function recordDue(formData: FormData) {
     reminderOffset: formData.get("reminderOffset") || "15_min_before",
   });
   if (!parsed.success) {
-    throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
+    return { error: parsed.error.issues.map((i) => i.message).join(", ") };
   }
   const data = parsed.data;
 
   const cycle = await getCycleById(businessId, data.cycleId);
-  if (!cycle) throw new Error("Collection cycle not found");
+  if (!cycle) return { error: "Collection cycle not found" };
 
   await db.transaction(async (tx) => {
     const [promise] = await tx
@@ -241,6 +285,7 @@ export async function recordDue(formData: FormData) {
   revalidatePath("/due");
   revalidatePath("/reminders");
   revalidatePath(`/customers/${cycle.customerId}`);
+  return {};
 }
 
 export async function cancelPromiseAndReminder(promiseId: string) {

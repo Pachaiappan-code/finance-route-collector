@@ -6,15 +6,22 @@ export const paymentMethodValues = ["cash", "upi", "bank_transfer", "other", "gp
 // The only two choices offered when recording or editing a payment.
 export const paymentMethodFormValues = ["cash", "gpay"] as const;
 
-export const recordPaymentSchema = z.object({
-  cycleId: z.string().uuid(),
-  amount: z.coerce.number().positive("Amount must be greater than 0"),
-  paymentDate: z.string().min(1),
-  paymentTime: z.string().min(1),
-  paymentMethod: z.enum(paymentMethodFormValues),
-  notes: z.string().trim().max(1000).optional().or(z.literal("")),
-  clientRequestId: z.string().min(1).max(64),
-});
+// A single payment entry can be split across cash and GPay in one go (most
+// customers pay this way) — at least one of the two must be greater than 0.
+export const recordPaymentSchema = z
+  .object({
+    cycleId: z.string().uuid(),
+    cashAmount: z.coerce.number().nonnegative().default(0),
+    gpayAmount: z.coerce.number().nonnegative().default(0),
+    paymentDate: z.string().min(1),
+    paymentTime: z.string().min(1),
+    notes: z.string().trim().max(1000).optional().or(z.literal("")),
+    clientRequestId: z.string().min(1).max(64),
+  })
+  .refine((data) => data.cashAmount > 0 || data.gpayAmount > 0, {
+    message: "Enter a cash or GPay amount",
+    path: ["cashAmount"],
+  });
 
 export const editPaymentSchema = z.object({
   paymentId: z.string().uuid(),

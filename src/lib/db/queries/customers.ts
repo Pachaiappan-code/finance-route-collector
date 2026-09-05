@@ -75,12 +75,18 @@ export async function getCustomerById(businessId: string, customerId: string) {
 }
 
 export async function nextCustomerCode(businessId: string): Promise<string> {
+  // Derived from the highest existing code, not count(*) — a count-based
+  // sequence collides with an already-used code as soon as any customer has
+  // ever been deleted (e.g. via the "Delete customer" safety-guarded action),
+  // since the count then falls behind the highest number actually issued.
   const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
+    .select({
+      maxSeq: sql<number>`coalesce(max(substring(${customers.customerCode} from 5)::int), 0)`,
+    })
     .from(customers)
     .where(eq(customers.businessId, businessId));
 
-  const sequence = (row?.count ?? 0) + 1;
+  const sequence = (row?.maxSeq ?? 0) + 1;
   return `CUS-${String(sequence).padStart(4, "0")}`;
 }
 

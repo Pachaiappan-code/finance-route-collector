@@ -57,38 +57,39 @@ export function AddPaymentForm({ cycleId, remaining }: { cycleId: string; remain
         const fd = new FormData(e.currentTarget);
         fd.set("cycleId", cycleId);
         fd.set("clientRequestId", crypto.randomUUID());
-        await recordPayment(fd);
+        const result = await recordPayment(fd);
+        if (result.error) {
+          window.alert(result.error);
+          return;
+        }
         setOpen(false);
         startTransition(() => router.refresh());
       }}
       className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4"
     >
       <p className="text-sm font-medium text-foreground">Add payment</p>
-      <label className="text-xs font-medium text-muted">Amount</label>
-      <input
-        name="amount"
-        type="number"
-        step="0.01"
-        defaultValue={remaining > 0 ? remaining : undefined}
-        required
-        autoFocus
-        className={inputClass}
-      />
+      <p className="text-xs text-muted">Most customers split cash and GPay — enter either or both.</p>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-muted">Cash amount</label>
+          <input
+            name="cashAmount"
+            type="number"
+            step="0.01"
+            min="0"
+            defaultValue={remaining > 0 ? remaining : undefined}
+            autoFocus
+            className={inputClass}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-muted">GPay amount</label>
+          <input name="gpayAmount" type="number" step="0.01" min="0" className={inputClass} />
+        </div>
+      </div>
       <label className="text-xs font-medium text-muted">Payment date</label>
       <input name="paymentDate" type="date" defaultValue={todayDate()} required className={inputClass} />
       <input type="hidden" name="paymentTime" value={nowTime()} />
-      <label className="text-xs font-medium text-muted">Payment method</label>
-      <div className="flex gap-2">
-        {(["cash", "gpay"] as const).map((m) => (
-          <label
-            key={m}
-            className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border text-sm font-medium capitalize has-[:checked]:border-brand-navy has-[:checked]:bg-info-soft has-[:checked]:text-info dark:has-[:checked]:border-brand-navy-strong"
-          >
-            <input type="radio" name="paymentMethod" value={m} defaultChecked={m === "cash"} className="sr-only" />
-            {m}
-          </label>
-        ))}
-      </div>
       <label className="text-xs font-medium text-muted">Notes (optional)</label>
       <input name="notes" className={inputClass} />
       <div className="mt-1 flex gap-2">
@@ -133,7 +134,11 @@ export function SetReminderForm({ cycleId, remaining }: { cycleId: string; remai
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         fd.set("cycleId", cycleId);
-        await recordDue(fd);
+        const result = await recordDue(fd);
+        if (result.error) {
+          window.alert(result.error);
+          return;
+        }
         setOpen(false);
         startTransition(() => router.refresh());
       }}
@@ -210,7 +215,11 @@ export function PaymentRowItem({ payment }: { payment: PaymentRow }) {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         fd.set("paymentId", payment.id);
-        await editPayment(fd);
+        const result = await editPayment(fd);
+        if (result.error) {
+          window.alert(result.error);
+          return;
+        }
         setEditing(false);
         startTransition(() => router.refresh());
       }}

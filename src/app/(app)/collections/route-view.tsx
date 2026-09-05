@@ -55,23 +55,31 @@ export function CollectionRouteView({ cycles }: { cycles: CycleListRow[] }) {
     focusNextPending(cycleId);
   }
 
-  async function submitPayment(cycle: CycleListRow, amount: number) {
+  async function submitPayment(cycle: CycleListRow, cashAmount: number, gpayAmount: number) {
     const fd = new FormData();
     fd.set("cycleId", cycle.cycleId);
-    fd.set("amount", String(amount));
+    fd.set("cashAmount", String(cashAmount));
+    fd.set("gpayAmount", String(gpayAmount));
     fd.set("paymentDate", todayDate());
     fd.set("paymentTime", nowTime());
-    fd.set("paymentMethod", "cash");
     fd.set("notes", "");
     fd.set("clientRequestId", crypto.randomUUID());
-    await recordPayment(fd);
+    const result = await recordPayment(fd);
+    if (result.error) {
+      window.alert(result.error);
+      return;
+    }
     closeAndAdvance(cycle.cycleId);
   }
 
   async function submitDue(cycle: CycleListRow, form: HTMLFormElement) {
     const fd = new FormData(form);
     fd.set("cycleId", cycle.cycleId);
-    await recordDue(fd);
+    const result = await recordDue(fd);
+    if (result.error) {
+      window.alert(result.error);
+      return;
+    }
     closeAndAdvance(cycle.cycleId);
   }
 
@@ -131,7 +139,7 @@ export function CollectionRouteView({ cycles }: { cycles: CycleListRow[] }) {
               <div className="mt-3.5 grid grid-cols-3 gap-2">
                 <button
                   disabled={isPending}
-                  onClick={() => submitPayment(c, remaining)}
+                  onClick={() => submitPayment(c, remaining, 0)}
                   className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-success text-sm font-semibold text-white shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
                 >
                   <CheckCircle2 size={16} /> Paid
@@ -163,21 +171,39 @@ export function CollectionRouteView({ cycles }: { cycles: CycleListRow[] }) {
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  const amount = Number(new FormData(e.currentTarget).get("amount"));
-                  submitPayment(c, amount);
+                  const fd = new FormData(e.currentTarget);
+                  const cashAmount = Number(fd.get("cashAmount")) || 0;
+                  const gpayAmount = Number(fd.get("gpayAmount")) || 0;
+                  submitPayment(c, cashAmount, gpayAmount);
                 }}
                 className="mt-3.5 flex flex-col gap-2 border-t border-border pt-3.5"
               >
-                <label className="text-xs font-medium text-muted">Amount paid</label>
-                <input
-                  name="amount"
-                  type="number"
-                  step="0.01"
-                  max={remaining}
-                  required
-                  autoFocus
-                  className="h-11 rounded-xl border border-border bg-background px-3 text-foreground outline-none focus:border-brand-navy dark:focus:border-brand-navy-strong"
-                />
+                <p className="text-xs text-muted">
+                  Most customers split cash and GPay — enter either or both.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-muted">Cash amount</label>
+                    <input
+                      name="cashAmount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      autoFocus
+                      className="h-11 rounded-xl border border-border bg-background px-3 text-foreground outline-none focus:border-brand-navy dark:focus:border-brand-navy-strong"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-muted">GPay amount</label>
+                    <input
+                      name="gpayAmount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="h-11 rounded-xl border border-border bg-background px-3 text-foreground outline-none focus:border-brand-navy dark:focus:border-brand-navy-strong"
+                    />
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <button
                     type="submit"
