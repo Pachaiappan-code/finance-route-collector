@@ -63,13 +63,20 @@ Paid/Partial/Unpaid → route drilldown, collection-mode screen, fully
 editable payment history (add/edit, Cash or GPay, notes), payment
 promises + reminders, follow-up (due) list, reports with from/to date
 range + route/status/method filters, CSV export, DD/MM/YYYY dates
-throughout, settings, light/dark theme, branded design. Deployed to
-Vercel production, verified with real login + database round trips.
+throughout, settings, light/dark theme, branded design. A customer's
+"Add payment" button stays available even after their cycle is already
+Paid (covers a second payment in the same month), and a loan can be
+closed at any time via "Complete loan" — the outstanding amount is
+editable at closing and the owner assigns a 1-5 customer rating, after
+which "Re-loan" appears to start a new loan for that customer. Deployed
+to Vercel production, verified with real login + database round trips.
 Android is a Capacitor 8 WebView shell around the same production site —
 no local SDK needed, it builds on GitHub Actions
 (`.github/workflows/android-build.yml`), including a fix for the
-edge-to-edge status/navigation bar; see
-[docs/android-build.md](./docs/android-build.md) for how to grab the APK
-and send it to a client. Offline support and Android push notifications
-are not yet built (reminders are recorded and manageable, but nothing
-pings the device yet — see [docs/notifications.md](./docs/notifications.md)).
+edge-to-edge status/navigation bar and hardware back-button handling
+(navigates back through app history, only prompting to exit at the
+root); see [docs/android-build.md](./docs/android-build.md) for how to
+grab the APK and send it to a client. Offline support and Android push
+notifications are not yet built (reminders are recorded and manageable,
+but nothing pings the device yet — see
+[docs/notifications.md](./docs/notifications.md)).
