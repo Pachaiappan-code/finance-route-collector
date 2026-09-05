@@ -61,32 +61,32 @@ export async function getRouteMonthSummaries(businessId: string, cycleMonth: str
       customerCount: sql<number>`(
         select count(*) from collection_cycles cc
         join customers c on c.id = cc.customer_id and c.is_active = true
-        where cc.route_id = ${routes.id} and cc.cycle_month = ${cycleMonth}
+        where cc.route_id = routes.id and cc.cycle_month = ${cycleMonth}
       )::int`,
       paidCount: sql<number>`(
         select count(*) from collection_cycles cc
         join customers c on c.id = cc.customer_id and c.is_active = true
-        where cc.route_id = ${routes.id} and cc.cycle_month = ${cycleMonth} and cc.status = 'paid'
+        where cc.route_id = routes.id and cc.cycle_month = ${cycleMonth} and cc.status = 'paid'
       )::int`,
       partialCount: sql<number>`(
         select count(*) from collection_cycles cc
         join customers c on c.id = cc.customer_id and c.is_active = true
-        where cc.route_id = ${routes.id} and cc.cycle_month = ${cycleMonth} and cc.status = 'partial'
+        where cc.route_id = routes.id and cc.cycle_month = ${cycleMonth} and cc.status = 'partial'
       )::int`,
       unpaidCount: sql<number>`(
         select count(*) from collection_cycles cc
         join customers c on c.id = cc.customer_id and c.is_active = true
-        where cc.route_id = ${routes.id} and cc.cycle_month = ${cycleMonth} and cc.status = 'unpaid'
+        where cc.route_id = routes.id and cc.cycle_month = ${cycleMonth} and cc.status = 'unpaid'
       )::int`,
       expected: sql<string>`coalesce((
         select sum(cc.expected_amount) from collection_cycles cc
         join customers c on c.id = cc.customer_id and c.is_active = true
-        where cc.route_id = ${routes.id} and cc.cycle_month = ${cycleMonth}
+        where cc.route_id = routes.id and cc.cycle_month = ${cycleMonth}
       ), 0)`,
       collected: sql<string>`coalesce((
         select sum(cc.paid_amount) from collection_cycles cc
         join customers c on c.id = cc.customer_id and c.is_active = true
-        where cc.route_id = ${routes.id} and cc.cycle_month = ${cycleMonth}
+        where cc.route_id = routes.id and cc.cycle_month = ${cycleMonth}
       ), 0)`,
     })
     .from(routes)
