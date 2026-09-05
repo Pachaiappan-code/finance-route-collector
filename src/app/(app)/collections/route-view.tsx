@@ -91,7 +91,12 @@ export function CollectionRouteView({ cycles }: { cycles: CycleListRow[] }) {
             }}
             data-testid="cycle-card"
             data-customer-name={c.customerName}
-            className="rounded-2xl border border-border bg-surface p-4"
+            onClick={() => {
+              if (c.status === "paid") router.push(`/customers/${c.customerId}`);
+            }}
+            className={`rounded-2xl border border-border bg-surface p-4 ${
+              c.status === "paid" ? "cursor-pointer active:bg-info-soft/40" : ""
+            }`}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -102,6 +107,7 @@ export function CollectionRouteView({ cycles }: { cycles: CycleListRow[] }) {
                   <p className="font-medium text-foreground">{c.customerName}</p>
                   <a
                     href={`tel:${c.customerPhone}`}
+                    onClick={(e) => e.stopPropagation()}
                     className="flex items-center gap-1 text-xs text-muted"
                   >
                     <Phone size={11} /> {c.customerPhone}
@@ -115,6 +121,9 @@ export function CollectionRouteView({ cycles }: { cycles: CycleListRow[] }) {
                 >
                   {c.status}
                 </span>
+                {c.status === "paid" && (
+                  <p className="mt-1 text-[10px] text-muted">Tap to view profile</p>
+                )}
               </div>
             </div>
 

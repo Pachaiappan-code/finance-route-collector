@@ -1,11 +1,11 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/config";
 import { db } from "@/lib/db";
-import { collectionCycles, customers, loans } from "@/lib/db/schema";
+import { collectionCycles, customers, loans, payments, paymentPromises } from "@/lib/db/schema";
 import { nextCustomerCode } from "@/lib/db/queries/customers";
 import { customerInputSchema } from "@/lib/validation/customer";
 import { closeLoanSchema, loanInputSchema } from "@/lib/validation/loan";
@@ -134,6 +134,65 @@ export async function updateCustomer(customerId: string, formData: FormData) {
 
   revalidatePath("/customers");
   revalidatePath(`/customers/${customerId}`);
+}
+
+/**
+ * Permanently deletes a customer, but only when it's safe: if any payment or
+ * payment promise was ever recorded against them, deletion is refused (use
+ * Deactivate instead) so real financial history can never be destroyed. This
+ * is meant for cleaning up customers added by mistake, not for real accounts.
+ */
+export async function deleteCustomer(customerId: string) {
+  const businessId = await requireBusinessId();
+
+  const [customer] = await db
+    .select({ id: customers.id, businessId: customers.businessId })
+    .from(customers)
+    .where(eq(customers.id, customerId))
+    .limit(1);
+  if (!customer || customer.businessId !== businessId) {
+    throw new Error("Customer not found");
+  }
+
+  const [hasPayment] = await db
+    .select({ id: payments.id })
+    .from(payments)
+    .where(eq(payments.customerId, customerId))
+    .limit(1);
+  if (hasPayment) {
+    throw new Error(
+      "This customer has recorded payments and can't be deleted — use Deactivate instead to keep their history.",
+    );
+  }
+
+  const [hasPromise] = await db
+    .select({ id: paymentPromises.id })
+    .from(paymentPromises)
+    .where(eq(paymentPromises.customerId, customerId))
+    .limit(1);
+  if (hasPromise) {
+    throw new Error(
+      "This customer has a payment promise on file and can't be deleted — use Deactivate instead.",
+    );
+  }
+
+  await db.transaction(async (tx) => {
+    const customerLoans = await tx
+      .select({ id: loans.id })
+      .from(loans)
+      .where(eq(loans.customerId, customerId));
+    const loanIds = customerLoans.map((l) => l.id);
+
+    if (loanIds.length > 0) {
+      await tx.delete(collectionCycles).where(inArray(collectionCycles.loanId, loanIds));
+      await tx.delete(loans).where(inArray(loans.id, loanIds));
+    }
+
+    await tx.delete(customers).where(eq(customers.id, customerId));
+  });
+
+  revalidatePath("/customers");
+  revalidatePath("/dashboard");
 }
 
 export async function toggleCustomerActive(customerId: string, isActive: boolean) {
