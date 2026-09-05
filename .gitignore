@@ -52,6 +52,10 @@ next-env.d.ts
 *.keystore
 *.jks
 keystore.properties
+# Exception: a debug keystore is not a secret (public alias/password, never
+# used for release signing). Committed so every CI build shares one stable
+# signature — see android/app/build.gradle signingConfigs.debug.
+!/android/debug.keystore
 google-services.json
 play-store-service-account.json
 
