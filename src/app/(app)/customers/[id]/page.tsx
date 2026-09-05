@@ -10,6 +10,8 @@ import { formatCurrency } from "@/lib/utils/format";
 import { formatDisplayDate, formatMonthLabel } from "@/lib/utils/date";
 import { toggleCustomerActive } from "../actions";
 import { AddPaymentForm, PaymentRowItem, PromiseRowItem, SetReminderForm } from "./payment-panel";
+import { CloseLoanForm } from "./loan-panel";
+import { RatingStars } from "@/components/rating-stars";
 
 const CYCLE_STATUS_STYLE: Record<string, string> = {
   unpaid: "bg-border/60 text-muted",
@@ -47,6 +49,13 @@ export default async function CustomerDetailPage({
     ? Math.max(Number(currentCycle.expectedAmount) - Number(currentCycle.paidAmount), 0)
     : 0;
   const activePromise = currentCycleEntry?.promises.find((p) => p.status === "pending");
+  const loanOutstanding = primaryLoan
+    ? Math.max(
+        Number(primaryLoan.loan.totalPayableAmount) -
+          primaryLoan.cycles.reduce((sum, c) => sum + Number(c.cycle.paidAmount), 0),
+        0,
+      )
+    : 0;
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-5">
@@ -117,7 +126,13 @@ export default async function CustomerDetailPage({
                 highlight={primaryLoan.loan.status === "completed"}
               />
             </div>
-            {primaryLoan.loan.status === "completed" && (
+            {primaryLoan.loan.status === "active" ? (
+              <CloseLoanForm
+                customerId={id}
+                loanId={primaryLoan.loan.id}
+                computedOutstanding={loanOutstanding}
+              />
+            ) : (
               <Link
                 href={`/customers/${id}/reloan`}
                 className="mt-3 flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-navy text-sm font-medium text-white shadow-sm dark:bg-brand-navy-strong"
@@ -174,14 +189,14 @@ export default async function CustomerDetailPage({
                   </div>
                 )}
 
-                {currentCycle.status !== "paid" && (
-                  <div className="mt-3 flex gap-2">
-                    <AddPaymentForm cycleId={currentCycle.id} remaining={remaining} />
-                    {!activePromise && (
-                      <SetReminderForm cycleId={currentCycle.id} remaining={remaining} />
-                    )}
-                  </div>
-                )}
+                <div className="mt-3 flex gap-2">
+                  {/* Add Payment always available — a customer can pay again in the
+                      same month even after the cycle is already fully Paid. */}
+                  <AddPaymentForm cycleId={currentCycle.id} remaining={remaining} />
+                  {currentCycle.status !== "paid" && !activePromise && (
+                    <SetReminderForm cycleId={currentCycle.id} remaining={remaining} />
+                  )}
+                </div>
               </div>
             </section>
           )}
@@ -217,6 +232,17 @@ export default async function CustomerDetailPage({
                 {formatCurrency(Number(loan.monthlyAmount))}/month · started{" "}
                 {formatDisplayDate(loan.startDate)}
               </p>
+
+              {loan.status === "completed" && (
+                <div className="mt-2 flex items-center justify-between rounded-xl bg-success-soft px-3 py-2 text-xs">
+                  <span className="text-success">
+                    Closed {loan.closedAt ? formatDisplayDate(loan.closedAt) : ""} · Final
+                    outstanding{" "}
+                    {formatCurrency(Number(loan.finalOutstandingAmount ?? 0))}
+                  </span>
+                  {loan.customerRating && <RatingStars rating={loan.customerRating} />}
+                </div>
+              )}
 
               <div className="mt-3 flex flex-col gap-2.5">
                 {cycles.length === 0 && (

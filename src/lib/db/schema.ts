@@ -13,8 +13,9 @@ import {
   pgEnum,
   uniqueIndex,
   index,
+  check,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -232,12 +233,22 @@ export const loans = pgTable(
     startDate: date("start_date").notNull(),
     status: loanStatusEnum("status").notNull().default("active"),
     notes: text("notes"),
+    // Set only when the loan is manually closed via "Complete Loan". The
+    // owner can edit this away from the computed outstanding (e.g. to
+    // write off a small remainder) — it's the historical record of what
+    // was agreed at closing, not fed back into any active-balance query.
+    finalOutstandingAmount: numeric("final_outstanding_amount", { precision: 12, scale: 2 }),
+    // 1-5, set by the owner when closing the loan, reflecting how this
+    // customer performed on this specific loan.
+    customerRating: integer("customer_rating"),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("loans_customer_idx").on(table.customerId),
     index("loans_status_idx").on(table.status),
+    check("loans_customer_rating_range", sql`${table.customerRating} between 1 and 5`),
   ],
 );
 

@@ -68,6 +68,16 @@ apps" prompt, and updates require sending a new APK (no auto-update).
 Publishing to Google Play (see below) removes both tradeoffs but takes
 longer to set up.
 
+## Hardware back button
+
+`@capacitor/app` + `src/components/back-button-handler.tsx`: pressing back
+navigates within the app's own history (`window.history.back()`) as long
+as there's somewhere to go back to (`canGoBack`, reported by the plugin
+from the WebView's real navigation stack — this includes Next.js's
+client-side route pushes, not just full page loads). Only at the very
+root, with nothing left to go back to, does it prompt "Exit EMF
+Collections?" and call `App.exitApp()` on confirmation. No-ops on the web.
+
 ## Local Notifications plugin (section 23–24 of the spec)
 
 Not yet added. When ready:

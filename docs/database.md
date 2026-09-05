@@ -20,7 +20,12 @@ customer (permanent) → loan (one or more, re-loans create new ones)
   support). Each has its own `principal_amount`, `interest_amount`,
   `total_payable_amount`, `monthly_amount`, `start_date`, and `status`
   (`active`/`completed`). Re-loaning never touches a previous loan row —
-  it inserts a new one.
+  it inserts a new one. Closing a loan (the "Complete loan" button, only
+  shown while `active`) sets `status = 'completed'`, `closed_at`, an
+  owner-entered `customer_rating` (1-5, DB-checked), and a
+  `final_outstanding_amount` — an **editable** record of what was agreed
+  at closing (e.g. writing off a small remainder), independent of the
+  live computed balance and never fed back into any active-balance query.
 - **`collection_cycles`** — one row per `(loan_id, cycle_month)`, unique
   constraint enforced. `cycle_month` is always the 1st of a month.
   `expected_amount`, `paid_amount`, and `status` (`unpaid`/`partial`/`paid`)

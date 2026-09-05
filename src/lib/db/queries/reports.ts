@@ -134,6 +134,9 @@ export async function getReportLoans(businessId: string, filters: { status?: "ac
       ), 0)`,
       status: loans.status,
       startDate: loans.startDate,
+      finalOutstandingAmount: loans.finalOutstandingAmount,
+      customerRating: loans.customerRating,
+      closedAt: loans.closedAt,
       lastPaymentDate: sql<string | null>`(
         select max(p.payment_date) from payments p
         inner join collection_cycles cc on cc.id = p.collection_cycle_id

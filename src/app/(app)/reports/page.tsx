@@ -10,6 +10,7 @@ import { listActiveRoutesForSelect } from "@/lib/db/queries/customers";
 import { currentCycleMonth } from "@/lib/calculations/cycle";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatDisplayDate } from "@/lib/utils/date";
+import { RatingStars } from "@/components/rating-stars";
 
 function firstOfCurrentMonth() {
   return currentCycleMonth();
@@ -198,9 +199,10 @@ export default async function ReportsPage({
               >
                 <div>
                   <p className="font-medium text-foreground">{l.customerName}</p>
-                  <p className="text-xs text-muted">
+                  <p className="flex items-center gap-1.5 text-xs text-muted">
                     Started {formatDisplayDate(l.startDate)} ·{" "}
                     <span className="capitalize">{l.status}</span>
+                    {l.customerRating && <RatingStars rating={l.customerRating} />}
                   </p>
                 </div>
                 <div className="text-right">

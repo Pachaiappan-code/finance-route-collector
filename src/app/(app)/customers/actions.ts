@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { collectionCycles, customers, loans } from "@/lib/db/schema";
 import { nextCustomerCode } from "@/lib/db/queries/customers";
 import { customerInputSchema } from "@/lib/validation/customer";
-import { loanInputSchema } from "@/lib/validation/loan";
+import { closeLoanSchema, loanInputSchema } from "@/lib/validation/loan";
 import { resolveInitialCycleMonth } from "@/lib/calculations/cycle";
 
 async function requireBusinessId(): Promise<string> {
@@ -190,5 +190,56 @@ export async function createReLoan(customerId: string, formData: FormData) {
 
   revalidatePath("/customers");
   revalidatePath("/dashboard");
+  revalidatePath(`/customers/${customerId}`);
+}
+
+/**
+ * Manually closes an active loan: records a final outstanding amount (the
+ * owner's call — editable away from the computed balance, e.g. to write
+ * off a small remainder) and a 1-5 rating of how the customer performed
+ * on this loan. Never touches payments/cycles history — closing is a
+ * status + record change, not a data deletion. Re-loan becomes available
+ * once a loan is completed.
+ */
+export async function closeLoan(customerId: string, formData: FormData) {
+  const businessId = await requireBusinessId();
+
+  const parsed = closeLoanSchema.safeParse({
+    loanId: formData.get("loanId"),
+    finalOutstandingAmount: formData.get("finalOutstandingAmount"),
+    customerRating: formData.get("customerRating"),
+    notes: formData.get("notes") ?? "",
+  });
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
+  }
+  const data = parsed.data;
+
+  const [loan] = await db
+    .select({ id: loans.id, customerId: loans.customerId, businessId: customers.businessId })
+    .from(loans)
+    .innerJoin(customers, eq(loans.customerId, customers.id))
+    .where(eq(loans.id, data.loanId))
+    .limit(1);
+
+  if (!loan || loan.businessId !== businessId || loan.customerId !== customerId) {
+    throw new Error("Loan not found");
+  }
+
+  await db
+    .update(loans)
+    .set({
+      status: "completed",
+      finalOutstandingAmount: String(data.finalOutstandingAmount),
+      customerRating: data.customerRating,
+      notes: data.notes || null,
+      closedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(loans.id, data.loanId));
+
+  revalidatePath("/customers");
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
   revalidatePath(`/customers/${customerId}`);
 }
