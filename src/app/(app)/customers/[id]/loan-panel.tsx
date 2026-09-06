@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Star } from "lucide-react";
 import { closeLoan } from "../actions";
 import { formatCurrency } from "@/lib/utils/format";
+import { getFriendlyErrorMessage } from "@/lib/utils/error-message";
 
 const inputClass =
   "h-11 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-brand-navy dark:focus:border-brand-navy-strong";
@@ -35,17 +36,23 @@ export function CloseLoanForm({
 
   return (
     <form
-      onSubmit={async (e) => {
+      onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         fd.set("loanId", loanId);
-        const result = await closeLoan(customerId, fd);
-        if (result.error) {
-          window.alert(result.error);
-          return;
-        }
-        setOpen(false);
-        startTransition(() => router.refresh());
+        startTransition(async () => {
+          try {
+            const result = await closeLoan(customerId, fd);
+            if (result.error) {
+              window.alert(result.error);
+              return;
+            }
+            setOpen(false);
+            router.refresh();
+          } catch {
+            window.alert(getFriendlyErrorMessage());
+          }
+        });
       }}
       className="mt-3 flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4"
     >

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Clock, Phone, Split } from "lucide-react";
 import { recordDue, recordPayment } from "./actions";
 import { formatCurrency } from "@/lib/utils/format";
+import { getFriendlyErrorMessage } from "@/lib/utils/error-message";
 import type { CycleListRow, CycleStatus } from "@/lib/db/queries/cycles";
 
 const STATUS_STYLE: Record<CycleStatus, string> = {
@@ -49,13 +50,11 @@ export function CollectionRouteView({ cycles }: { cycles: CycleListRow[] }) {
   function closeAndAdvance(cycleId: string) {
     setOpenCard(null);
     setOpenAction(null);
-    startTransition(() => {
-      router.refresh();
-    });
+    router.refresh();
     focusNextPending(cycleId);
   }
 
-  async function submitPayment(cycle: CycleListRow, cashAmount: number, gpayAmount: number) {
+  function submitPayment(cycle: CycleListRow, cashAmount: number, gpayAmount: number) {
     const fd = new FormData();
     fd.set("cycleId", cycle.cycleId);
     fd.set("cashAmount", String(cashAmount));
@@ -64,23 +63,35 @@ export function CollectionRouteView({ cycles }: { cycles: CycleListRow[] }) {
     fd.set("paymentTime", nowTime());
     fd.set("notes", "");
     fd.set("clientRequestId", crypto.randomUUID());
-    const result = await recordPayment(fd);
-    if (result.error) {
-      window.alert(result.error);
-      return;
-    }
-    closeAndAdvance(cycle.cycleId);
+    startTransition(async () => {
+      try {
+        const result = await recordPayment(fd);
+        if (result.error) {
+          window.alert(result.error);
+          return;
+        }
+        closeAndAdvance(cycle.cycleId);
+      } catch {
+        window.alert(getFriendlyErrorMessage());
+      }
+    });
   }
 
-  async function submitDue(cycle: CycleListRow, form: HTMLFormElement) {
+  function submitDue(cycle: CycleListRow, form: HTMLFormElement) {
     const fd = new FormData(form);
     fd.set("cycleId", cycle.cycleId);
-    const result = await recordDue(fd);
-    if (result.error) {
-      window.alert(result.error);
-      return;
-    }
-    closeAndAdvance(cycle.cycleId);
+    startTransition(async () => {
+      try {
+        const result = await recordDue(fd);
+        if (result.error) {
+          window.alert(result.error);
+          return;
+        }
+        closeAndAdvance(cycle.cycleId);
+      } catch {
+        window.alert(getFriendlyErrorMessage());
+      }
+    });
   }
 
   return (
@@ -207,7 +218,8 @@ export function CollectionRouteView({ cycles }: { cycles: CycleListRow[] }) {
                 <div className="flex gap-2">
                   <button
                     type="submit"
-                    className="h-10 flex-1 rounded-xl bg-brand-navy text-sm font-medium text-white dark:bg-brand-navy-strong"
+                    disabled={isPending}
+                    className="h-10 flex-1 rounded-xl bg-brand-navy text-sm font-medium text-white dark:bg-brand-navy-strong disabled:opacity-50"
                   >
                     Save
                   </button>
@@ -275,7 +287,8 @@ export function CollectionRouteView({ cycles }: { cycles: CycleListRow[] }) {
                 <div className="flex gap-2">
                   <button
                     type="submit"
-                    className="h-10 flex-1 rounded-xl bg-brand-navy text-sm font-medium text-white dark:bg-brand-navy-strong"
+                    disabled={isPending}
+                    className="h-10 flex-1 rounded-xl bg-brand-navy text-sm font-medium text-white dark:bg-brand-navy-strong disabled:opacity-50"
                   >
                     Save
                   </button>

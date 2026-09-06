@@ -4,6 +4,7 @@ import { auth, signOut } from "@/lib/auth/config";
 import { db } from "@/lib/db";
 import { businesses } from "@/lib/db/schema";
 import { ThemeSettingsControl } from "@/components/theme-settings-control";
+import { SubmitButton } from "@/components/submit-button";
 import { updateBusinessSettings } from "./actions";
 
 const inputClass =
@@ -93,12 +94,9 @@ export default async function SettingsPage() {
               <option value="gpay">GPay</option>
             </select>
           </div>
-          <button
-            type="submit"
-            className="h-12 rounded-xl bg-brand-navy text-base font-medium text-white shadow-sm dark:bg-brand-navy-strong"
-          >
+          <SubmitButton className="h-12 rounded-xl bg-brand-navy text-base font-medium text-white shadow-sm dark:bg-brand-navy-strong disabled:opacity-50">
             Save settings
-          </button>
+          </SubmitButton>
         </form>
       </section>
 

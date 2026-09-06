@@ -5,6 +5,7 @@ import { listUpcomingReminders } from "@/lib/db/queries/reminders";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatDisplayDate, formatDisplayDateTime, formatDisplayTime } from "@/lib/utils/date";
 import { cancelPromiseAndReminder } from "../collections/actions";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function RemindersPage() {
   const session = await auth();
@@ -55,9 +56,9 @@ export default async function RemindersPage() {
                     await cancelPromiseAndReminder(r.promiseId);
                   }}
                 >
-                  <button className="mt-2 text-xs font-medium text-danger">
+                  <SubmitButton pendingLabel="Cancelling..." className="mt-2 text-xs font-medium text-danger disabled:opacity-50">
                     Cancel reminder
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
             </div>

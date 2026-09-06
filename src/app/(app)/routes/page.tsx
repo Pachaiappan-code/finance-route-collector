@@ -7,6 +7,7 @@ import { currentCycleMonth } from "@/lib/calculations/cycle";
 import { formatMonthLabel } from "@/lib/utils/date";
 import { formatCurrency } from "@/lib/utils/format";
 import { toggleRouteActive } from "./actions";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function RoutesPage() {
   const session = await auth();
@@ -46,7 +47,9 @@ export default async function RoutesPage() {
                     await toggleRouteActive(route.routeId, false);
                   }}
                 >
-                  <button className="text-xs font-medium text-muted">Deactivate</button>
+                  <SubmitButton pendingLabel="..." className="text-xs font-medium text-muted disabled:opacity-50">
+                    Deactivate
+                  </SubmitButton>
                 </form>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">

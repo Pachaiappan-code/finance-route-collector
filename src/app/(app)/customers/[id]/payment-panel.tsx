@@ -6,14 +6,8 @@ import { Pencil } from "lucide-react";
 import { editPayment, recordDue, recordPayment } from "../../collections/actions";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatDisplayDate, formatDisplayTime } from "@/lib/utils/date";
-
-type PaymentRow = {
-  id: string;
-  amount: string;
-  paymentDate: string;
-  paymentMethod: string;
-  notes: string | null;
-};
+import { getFriendlyErrorMessage } from "@/lib/utils/error-message";
+import type { PaymentRow } from "./payment-grouping";
 
 type PromiseRow = {
   id: string;
@@ -52,18 +46,24 @@ export function AddPaymentForm({ cycleId, remaining }: { cycleId: string; remain
 
   return (
     <form
-      onSubmit={async (e) => {
+      onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         fd.set("cycleId", cycleId);
         fd.set("clientRequestId", crypto.randomUUID());
-        const result = await recordPayment(fd);
-        if (result.error) {
-          window.alert(result.error);
-          return;
-        }
-        setOpen(false);
-        startTransition(() => router.refresh());
+        startTransition(async () => {
+          try {
+            const result = await recordPayment(fd);
+            if (result.error) {
+              window.alert(result.error);
+              return;
+            }
+            setOpen(false);
+            router.refresh();
+          } catch {
+            window.alert(getFriendlyErrorMessage());
+          }
+        });
       }}
       className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4"
     >
@@ -130,17 +130,23 @@ export function SetReminderForm({ cycleId, remaining }: { cycleId: string; remai
 
   return (
     <form
-      onSubmit={async (e) => {
+      onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         fd.set("cycleId", cycleId);
-        const result = await recordDue(fd);
-        if (result.error) {
-          window.alert(result.error);
-          return;
-        }
-        setOpen(false);
-        startTransition(() => router.refresh());
+        startTransition(async () => {
+          try {
+            const result = await recordDue(fd);
+            if (result.error) {
+              window.alert(result.error);
+              return;
+            }
+            setOpen(false);
+            router.refresh();
+          } catch {
+            window.alert(getFriendlyErrorMessage());
+          }
+        });
       }}
       className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4"
     >
@@ -211,17 +217,23 @@ export function PaymentRowItem({ payment }: { payment: PaymentRow }) {
 
   return (
     <form
-      onSubmit={async (e) => {
+      onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         fd.set("paymentId", payment.id);
-        const result = await editPayment(fd);
-        if (result.error) {
-          window.alert(result.error);
-          return;
-        }
-        setEditing(false);
-        startTransition(() => router.refresh());
+        startTransition(async () => {
+          try {
+            const result = await editPayment(fd);
+            if (result.error) {
+              window.alert(result.error);
+              return;
+            }
+            setEditing(false);
+            router.refresh();
+          } catch {
+            window.alert(getFriendlyErrorMessage());
+          }
+        });
       }}
       className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3"
     >
@@ -265,6 +277,144 @@ export function PaymentRowItem({ payment }: { payment: PaymentRow }) {
           type="submit"
           disabled={isPending}
           className="h-10 flex-1 rounded-xl bg-brand-navy text-xs font-medium text-white dark:bg-brand-navy-strong"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={() => setEditing(false)}
+          className="h-10 flex-1 rounded-xl border border-border text-xs font-medium text-foreground"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** One cash+GPay split entry, shown as a single line instead of two separate payment rows. */
+export function SplitPaymentRowItem({ cash, gpay }: { cash: PaymentRow; gpay: PaymentRow }) {
+  const [editing, setEditing] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+
+  if (!editing) {
+    return (
+      <div className="flex items-center justify-between rounded-xl bg-success-soft px-3 py-2">
+        <div>
+          <p className="text-sm font-medium text-success">
+            {formatCurrency(Number(cash.amount))} (Cash) + {formatCurrency(Number(gpay.amount))}{" "}
+            (GPay)
+          </p>
+          <p className="text-xs text-muted">
+            {formatDisplayDate(cash.paymentDate)}
+            {cash.notes ? ` · ${cash.notes}` : ""}
+          </p>
+        </div>
+        <button
+          onClick={() => setEditing(true)}
+          aria-label="Edit payment"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-success hover:bg-success/10"
+        >
+          <Pencil size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        const cashAmount = Number(fd.get("cashAmount"));
+        const gpayAmount = Number(fd.get("gpayAmount"));
+        const paymentDate = String(fd.get("paymentDate"));
+        const notes = String(fd.get("notes") ?? "");
+
+        const cashFd = new FormData();
+        cashFd.set("paymentId", cash.id);
+        cashFd.set("amount", String(cashAmount));
+        cashFd.set("paymentDate", paymentDate);
+        cashFd.set("paymentMethod", "cash");
+        cashFd.set("notes", notes);
+
+        const gpayFd = new FormData();
+        gpayFd.set("paymentId", gpay.id);
+        gpayFd.set("amount", String(gpayAmount));
+        gpayFd.set("paymentDate", paymentDate);
+        gpayFd.set("paymentMethod", "gpay");
+        gpayFd.set("notes", notes);
+
+        // Sequential, not parallel: editing one row changes the loan's total
+        // paid, which the other row's payable-cap check needs to see. Apply
+        // whichever side is DECREASING first — otherwise rebalancing the
+        // split without changing the combined total (e.g. 300+200 -> 350+150)
+        // can transiently overshoot the cap on the side that grows first.
+        const cashFirst = cashAmount - Number(cash.amount) <= gpayAmount - Number(gpay.amount);
+        const [first, second] = cashFirst ? [cashFd, gpayFd] : [gpayFd, cashFd];
+
+        startTransition(async () => {
+          try {
+            const firstResult = await editPayment(first);
+            if (firstResult.error) {
+              window.alert(firstResult.error);
+              return;
+            }
+            const secondResult = await editPayment(second);
+            if (secondResult.error) {
+              window.alert(secondResult.error);
+              return;
+            }
+
+            setEditing(false);
+            router.refresh();
+          } catch {
+            window.alert(getFriendlyErrorMessage());
+          }
+        });
+      }}
+      className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3"
+    >
+      <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-muted">Cash amount</label>
+          <input
+            name="cashAmount"
+            type="number"
+            step="0.01"
+            min="0"
+            defaultValue={cash.amount}
+            required
+            className={inputClass}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-muted">GPay amount</label>
+          <input
+            name="gpayAmount"
+            type="number"
+            step="0.01"
+            min="0"
+            defaultValue={gpay.amount}
+            required
+            className={inputClass}
+          />
+        </div>
+      </div>
+      <input
+        name="paymentDate"
+        type="date"
+        defaultValue={cash.paymentDate}
+        required
+        className={inputClass}
+      />
+      <input name="notes" defaultValue={cash.notes ?? ""} placeholder="Notes" className={inputClass} />
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={isPending}
+          className="h-10 flex-1 rounded-xl bg-brand-navy text-xs font-medium text-white dark:bg-brand-navy-strong disabled:opacity-50"
         >
           Save
         </button>

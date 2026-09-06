@@ -59,8 +59,9 @@ async function main() {
     .returning();
 
   console.log(`Created admin user: ${user.email}`);
-  console.log(`Initial password: ${ADMIN_PASSWORD}`);
-  console.log("Change this after first login (Settings will support password change in a later phase).");
+  console.log(
+    "Initial password: whatever SEED_ADMIN_PASSWORD was set to (or the script's built-in default) — not printed here to keep it out of shell/CI logs.",
+  );
 }
 
 main()

@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth/config";
 import { listActiveRoutesForSelect } from "@/lib/db/queries/customers";
 import { dayOfWeekName } from "@/lib/calculations/cycle";
 import { LoanTermFields } from "@/components/loan-term-fields";
+import { SubmitButton } from "@/components/submit-button";
 import { createCustomer } from "../actions";
 
 const inputClass =
@@ -79,13 +80,12 @@ export default async function NewCustomerPage() {
           <Field label="Notes" name="notes" textarea />
         </fieldset>
 
-        <button
-          type="submit"
+        <SubmitButton
           disabled={routes.length === 0}
           className="h-12 rounded-xl bg-brand-navy text-base font-medium text-white shadow-sm disabled:opacity-40 dark:bg-brand-navy-strong"
         >
           Save customer
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

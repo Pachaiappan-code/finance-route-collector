@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SubmitButton } from "@/components/submit-button";
 import { createRoute } from "../actions";
 
 const DAYS = [
@@ -69,12 +70,9 @@ export default function NewRoutePage() {
             className="rounded-xl border border-border bg-background p-3.5 text-base text-foreground outline-none transition-colors focus:border-brand-navy dark:focus:border-brand-navy-strong"
           />
         </div>
-        <button
-          type="submit"
-          className="h-12 rounded-xl bg-brand-navy text-base font-medium text-white shadow-sm dark:bg-brand-navy-strong"
-        >
+        <SubmitButton className="h-12 rounded-xl bg-brand-navy text-base font-medium text-white shadow-sm dark:bg-brand-navy-strong disabled:opacity-50">
           Create route
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

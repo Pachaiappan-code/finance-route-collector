@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth/config";
 import { getCustomerById } from "@/lib/db/queries/customers";
 import { LoanTermFields } from "@/components/loan-term-fields";
+import { SubmitButton } from "@/components/submit-button";
 import { createReLoan } from "../../actions";
 
 const inputClass =
@@ -76,12 +77,9 @@ export default async function ReLoanPage({
           </label>
           <textarea id="loanNotes" name="loanNotes" rows={3} className="rounded-xl border border-border bg-background p-3.5 text-base text-foreground outline-none focus:border-brand-navy dark:focus:border-brand-navy-strong" />
         </div>
-        <button
-          type="submit"
-          className="h-12 rounded-xl bg-brand-navy text-base font-medium text-white shadow-sm dark:bg-brand-navy-strong"
-        >
+        <SubmitButton className="h-12 rounded-xl bg-brand-navy text-base font-medium text-white shadow-sm dark:bg-brand-navy-strong disabled:opacity-50">
           Create new loan
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

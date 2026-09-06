@@ -10,6 +10,13 @@ const config: CapacitorConfig = {
     // API and Neon database as the website. No local data storage.
     url: "https://finance-route-collector.vercel.app",
     cleartext: false,
+    // Capacitor's own WebViewClient loads this bundled local page (from
+    // webDir, i.e. public/offline.html) instead of the OS's raw network
+    // error page whenever the main-frame load fails — this is what covers
+    // the "no internet at all when the app is first opened" case, since at
+    // that point nothing from the remote site (including our own React
+    // offline banner) has loaded yet to handle it in JS.
+    errorPath: "offline.html",
   },
   plugins: {
     // Capacitor 8's edge-to-edge system bars (bundled in @capacitor/core,

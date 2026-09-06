@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeScript } from "@/components/theme-script";
 import { NativeSystemBars } from "@/components/native-system-bars";
 import { BackButtonHandler } from "@/components/back-button-handler";
+import { OfflineBanner } from "@/components/offline-banner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <NativeSystemBars />
         <BackButtonHandler />
+        <OfflineBanner />
         {children}
       </body>
     </html>

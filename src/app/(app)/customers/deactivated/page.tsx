@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth/config";
 import { listCustomers } from "@/lib/db/queries/customers";
 import { toggleCustomerActive } from "../actions";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function DeactivatedCustomersPage() {
   const session = await auth();
@@ -41,9 +42,12 @@ export default async function DeactivatedCustomersPage() {
                 await toggleCustomerActive(c.id, true);
               }}
             >
-              <button className="rounded-full bg-brand-navy px-3.5 py-1.5 text-xs font-medium text-white dark:bg-brand-navy-strong">
+              <SubmitButton
+                pendingLabel="..."
+                className="rounded-full bg-brand-navy px-3.5 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-brand-navy-strong"
+              >
                 Activate
-              </button>
+              </SubmitButton>
             </form>
           </div>
         ))}

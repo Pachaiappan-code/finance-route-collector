@@ -8,7 +8,14 @@ import { ensureCurrentMonthCycles } from "@/lib/db/queries/ensure-cycles";
 import { currentCycleMonth } from "@/lib/calculations/cycle";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatDisplayDate, formatMonthLabel } from "@/lib/utils/date";
-import { AddPaymentForm, PaymentRowItem, PromiseRowItem, SetReminderForm } from "./payment-panel";
+import {
+  AddPaymentForm,
+  PaymentRowItem,
+  PromiseRowItem,
+  SetReminderForm,
+  SplitPaymentRowItem,
+} from "./payment-panel";
+import { groupSplitPayments } from "./payment-grouping";
 import { CloseLoanForm } from "./loan-panel";
 import { DeleteCustomerButton, ToggleActiveButton } from "./delete-customer-button";
 import { RatingStars } from "@/components/rating-stars";
@@ -266,18 +273,26 @@ export default async function CustomerDetailPage({
                     </p>
                     {payments.length > 0 && (
                       <div className="mt-2 flex flex-col gap-1.5">
-                        {payments.map((p) => (
-                          <PaymentRowItem
-                            key={p.id}
-                            payment={{
-                              id: p.id,
-                              amount: p.amount,
-                              paymentDate: p.paymentDate,
-                              paymentMethod: p.paymentMethod,
-                              notes: p.notes,
-                            }}
-                          />
-                        ))}
+                        {groupSplitPayments(
+                          payments.map((p) => ({
+                            id: p.id,
+                            amount: p.amount,
+                            paymentDate: p.paymentDate,
+                            paymentMethod: p.paymentMethod,
+                            notes: p.notes,
+                            clientRequestId: p.clientRequestId,
+                          })),
+                        ).map((group) =>
+                          group.type === "split" ? (
+                            <SplitPaymentRowItem
+                              key={group.cash.id}
+                              cash={group.cash}
+                              gpay={group.gpay}
+                            />
+                          ) : (
+                            <PaymentRowItem key={group.payment.id} payment={group.payment} />
+                          ),
+                        )}
                       </div>
                     )}
                     {promises.map((pr) => (
