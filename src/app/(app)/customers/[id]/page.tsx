@@ -8,10 +8,9 @@ import { ensureCurrentMonthCycles } from "@/lib/db/queries/ensure-cycles";
 import { currentCycleMonth } from "@/lib/calculations/cycle";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatDisplayDate, formatMonthLabel } from "@/lib/utils/date";
-import { toggleCustomerActive } from "../actions";
 import { AddPaymentForm, PaymentRowItem, PromiseRowItem, SetReminderForm } from "./payment-panel";
 import { CloseLoanForm } from "./loan-panel";
-import { DeleteCustomerButton } from "./delete-customer-button";
+import { DeleteCustomerButton, ToggleActiveButton } from "./delete-customer-button";
 import { RatingStars } from "@/components/rating-stars";
 
 const CYCLE_STATUS_STYLE: Record<string, string> = {
@@ -83,16 +82,7 @@ export default async function CustomerDetailPage({
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <form
-            action={async () => {
-              "use server";
-              await toggleCustomerActive(customer.id, !customer.isActive);
-            }}
-          >
-            <button className="text-xs font-medium text-muted">
-              {customer.isActive ? "Deactivate" : "Activate"}
-            </button>
-          </form>
+          <ToggleActiveButton customerId={customer.id} isActive={customer.isActive} />
           <DeleteCustomerButton customerId={customer.id} customerName={customer.name} />
         </div>
       </div>

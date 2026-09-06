@@ -9,7 +9,8 @@ import { collectionCycles, customers, loans, payments, paymentPromises } from "@
 import { nextCustomerCode } from "@/lib/db/queries/customers";
 import { customerInputSchema } from "@/lib/validation/customer";
 import { closeLoanSchema, loanInputSchema } from "@/lib/validation/loan";
-import { resolveInitialCycleMonth } from "@/lib/calculations/cycle";
+import { currentCycleMonth, resolveInitialCycleMonth } from "@/lib/calculations/cycle";
+import { formatMonthLabel } from "@/lib/utils/date";
 
 async function requireBusinessId(): Promise<string> {
   const session = await auth();
@@ -211,8 +212,43 @@ export async function deleteCustomer(
   return {};
 }
 
-export async function toggleCustomerActive(customerId: string, isActive: boolean) {
+/**
+ * Activates or deactivates a customer. Deactivating is refused while the
+ * customer's active loan has a pending (unpaid/partial) payment for the
+ * current month — settle or record it first, so a customer can't be hidden
+ * from the collection lists while they still owe money this month.
+ *
+ * Returns `{ error }` instead of throwing for expected failures — Next.js
+ * strips thrown Server Action error messages in production builds, so any
+ * message the user actually needs to see must come back as data, not a throw.
+ */
+export async function toggleCustomerActive(
+  customerId: string,
+  isActive: boolean,
+): Promise<{ error?: string }> {
   const businessId = await requireBusinessId();
+
+  if (!isActive) {
+    const cycleMonth = currentCycleMonth();
+    const [pending] = await db
+      .select({ status: collectionCycles.status })
+      .from(collectionCycles)
+      .innerJoin(loans, eq(collectionCycles.loanId, loans.id))
+      .where(
+        and(
+          eq(collectionCycles.customerId, customerId),
+          eq(collectionCycles.cycleMonth, cycleMonth),
+          eq(loans.status, "active"),
+          inArray(collectionCycles.status, ["unpaid", "partial"]),
+        ),
+      )
+      .limit(1);
+    if (pending) {
+      return {
+        error: `This customer has a pending payment for ${formatMonthLabel(cycleMonth)} — settle it before deactivating.`,
+      };
+    }
+  }
 
   await db
     .update(customers)
@@ -221,6 +257,7 @@ export async function toggleCustomerActive(customerId: string, isActive: boolean
 
   revalidatePath("/customers");
   revalidatePath(`/customers/${customerId}`);
+  return {};
 }
 
 /**

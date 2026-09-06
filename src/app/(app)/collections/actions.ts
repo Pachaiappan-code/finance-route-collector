@@ -1,16 +1,17 @@
 "use server";
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth/config";
 import { db } from "@/lib/db";
-import { collectionCycles, paymentPromises, payments, reminders } from "@/lib/db/schema";
+import { collectionCycles, loans, paymentPromises, payments, reminders } from "@/lib/db/schema";
 import {
   editPaymentSchema,
   recordDueSchema,
   recordPaymentSchema,
 } from "@/lib/validation/collection";
 import { getCycleById } from "@/lib/db/queries/cycles";
+import { formatCurrency } from "@/lib/utils/format";
 
 const REMINDER_OFFSET_MINUTES: Record<string, number> = {
   "15_min_before": 15,
@@ -53,6 +54,20 @@ async function recomputeCycleStatus(tx: Tx, cycleId: string) {
   return status;
 }
 
+/** Sum of all payments ever recorded against a loan (across every cycle), optionally excluding one payment (used when editing it in place). */
+async function totalPaidForLoan(loanId: string, excludePaymentId?: string): Promise<number> {
+  const [{ total }] = await db
+    .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+    .from(payments)
+    .innerJoin(collectionCycles, eq(payments.collectionCycleId, collectionCycles.id))
+    .where(
+      excludePaymentId
+        ? and(eq(collectionCycles.loanId, loanId), ne(payments.id, excludePaymentId))
+        : eq(collectionCycles.loanId, loanId),
+    );
+  return Number(total);
+}
+
 /**
  * Records a payment against a cycle. Used for full payment, partial payment,
  * and adding another later payment — they're all the same operation. Amount
@@ -87,6 +102,22 @@ export async function recordPayment(formData: FormData): Promise<{ error?: strin
 
   const cycle = await getCycleById(businessId, data.cycleId);
   if (!cycle) return { error: "Collection cycle not found" };
+
+  const [loan] = await db
+    .select({ totalPayableAmount: loans.totalPayableAmount })
+    .from(loans)
+    .where(eq(loans.id, cycle.loanId))
+    .limit(1);
+  if (loan) {
+    const totalPayable = Number(loan.totalPayableAmount);
+    const paidSoFar = await totalPaidForLoan(cycle.loanId);
+    const newTotal = paidSoFar + data.cashAmount + data.gpayAmount;
+    if (newTotal > totalPayable) {
+      return {
+        error: `Payable amount is only ${formatCurrency(totalPayable)} — this payment can't exceed it.`,
+      };
+    }
+  }
 
   const session = await auth();
 
@@ -200,6 +231,21 @@ export async function editPayment(formData: FormData): Promise<{ error?: string 
   if (payment.collectionCycleId) {
     const cycle = await getCycleById(businessId, payment.collectionCycleId);
     if (!cycle) return { error: "Payment not found" };
+
+    const [loan] = await db
+      .select({ totalPayableAmount: loans.totalPayableAmount })
+      .from(loans)
+      .where(eq(loans.id, cycle.loanId))
+      .limit(1);
+    if (loan) {
+      const totalPayable = Number(loan.totalPayableAmount);
+      const paidExcludingThis = await totalPaidForLoan(cycle.loanId, data.paymentId);
+      if (paidExcludingThis + data.amount > totalPayable) {
+        return {
+          error: `Payable amount is only ${formatCurrency(totalPayable)} — this payment can't exceed it.`,
+        };
+      }
+    }
   }
 
   await db.transaction(async (tx) => {
