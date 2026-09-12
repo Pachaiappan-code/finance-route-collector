@@ -40,6 +40,13 @@ export function CloseLoanForm({
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         fd.set("loanId", loanId);
+        const finalOutstandingAmount = Number(fd.get("finalOutstandingAmount"));
+        if (finalOutstandingAmount > 0) {
+          window.alert(
+            `This loan still has a pending amount of ${formatCurrency(finalOutstandingAmount)} — collect it before completing the loan.`,
+          );
+          return;
+        }
         startTransition(async () => {
           try {
             const result = await closeLoan(customerId, fd);
@@ -72,8 +79,8 @@ export function CloseLoanForm({
         className={inputClass}
       />
       <p className="text-xs text-muted">
-        Computed balance is {formatCurrency(computedOutstanding)} — edit this if
-        you&apos;re settling for a different amount (e.g. writing off a remainder).
+        Computed balance is {formatCurrency(computedOutstanding)}. Must be ₹0 to
+        complete the loan — edit this only to correct it if it looks wrong.
       </p>
 
       <label className="mt-1 text-xs font-medium text-muted">

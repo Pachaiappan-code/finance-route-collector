@@ -89,6 +89,12 @@ export default async function CustomerDetailPage({
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
+          <Link
+            href={`/customers/${id}/edit`}
+            className="text-xs font-medium text-brand-navy dark:text-brand-navy-strong"
+          >
+            Edit
+          </Link>
           <ToggleActiveButton customerId={customer.id} isActive={customer.isActive} />
           <DeleteCustomerButton customerId={customer.id} customerName={customer.name} />
         </div>

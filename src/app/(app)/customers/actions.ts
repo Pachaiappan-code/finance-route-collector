@@ -11,6 +11,7 @@ import { customerInputSchema } from "@/lib/validation/customer";
 import { closeLoanSchema, loanInputSchema } from "@/lib/validation/loan";
 import { currentCycleMonth, resolveInitialCycleMonth } from "@/lib/calculations/cycle";
 import { formatMonthLabel } from "@/lib/utils/date";
+import { formatCurrency } from "@/lib/utils/format";
 
 async function requireBusinessId(): Promise<string> {
   const session = await auth();
@@ -119,28 +120,108 @@ export async function createCustomer(formData: FormData) {
   redirect(`/customers/${newCustomerId}`);
 }
 
-/** Updates customer profile fields only — loan terms are changed via re-loan, not by editing the customer record. */
-export async function updateCustomer(customerId: string, formData: FormData) {
+/**
+ * Updates customer profile fields (name, phone, address, route, notes, etc.)
+ * and, when a loanId is included, that loan's financial terms too
+ * (principal/interest/months, which re-derive total payable and monthly
+ * amount exactly like at creation time) — this is for correcting a mistake
+ * after the fact, not for changing terms mid-loan as a business decision
+ * (that's what re-loan is for).
+ *
+ * Editing the loan's terms only updates the *not-yet-paid* cycles' expected
+ * amount going forward — already-paid months keep their original recorded
+ * expected amount so historical collection data is never rewritten.
+ *
+ * Returns `{ error }` instead of throwing for expected failures — Next.js
+ * strips thrown Server Action error messages in production builds, so any
+ * message the user actually needs to see must come back as data, not a throw.
+ */
+export async function updateCustomer(
+  customerId: string,
+  formData: FormData,
+): Promise<{ error?: string }> {
   const businessId = await requireBusinessId();
-  const data = parseCustomerForm(formData);
 
-  await db
-    .update(customers)
-    .set({
-      name: data.name,
-      phone: data.phone,
-      alternatePhone: data.alternatePhone || null,
-      address: data.address || null,
-      area: data.area || null,
-      routeId: data.routeId,
-      routeSequence: data.routeSequence,
-      notes: data.notes || null,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(customers.businessId, businessId), eq(customers.id, customerId)));
+  const parsedCustomer = customerInputSchema.safeParse({
+    name: formData.get("name"),
+    phone: formData.get("phone"),
+    alternatePhone: formData.get("alternatePhone") ?? "",
+    address: formData.get("address") ?? "",
+    area: formData.get("area") ?? "",
+    routeId: formData.get("routeId"),
+    routeSequence: formData.get("routeSequence") || 0,
+    notes: formData.get("notes") ?? "",
+  });
+  if (!parsedCustomer.success) {
+    return { error: parsedCustomer.error.issues.map((i) => i.message).join(", ") };
+  }
+  const customerData = parsedCustomer.data;
+
+  const loanId = formData.get("loanId");
+  let loanData: ReturnType<typeof parseLoanForm> | null = null;
+  if (typeof loanId === "string" && loanId) {
+    try {
+      loanData = parseLoanForm(formData);
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Invalid loan details" };
+    }
+  }
+
+  const [customer] = await db
+    .select({ id: customers.id, businessId: customers.businessId })
+    .from(customers)
+    .where(eq(customers.id, customerId))
+    .limit(1);
+  if (!customer || customer.businessId !== businessId) {
+    return { error: "Customer not found" };
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(customers)
+      .set({
+        name: customerData.name,
+        phone: customerData.phone,
+        alternatePhone: customerData.alternatePhone || null,
+        address: customerData.address || null,
+        area: customerData.area || null,
+        routeId: customerData.routeId,
+        routeSequence: customerData.routeSequence,
+        notes: customerData.notes || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(customers.id, customerId));
+
+    if (loanData && typeof loanId === "string") {
+      await tx
+        .update(loans)
+        .set({
+          principalAmount: String(loanData.principalAmount),
+          interestAmount: String(loanData.interestAmount),
+          totalPayableAmount: String(loanData.totalPayableAmount),
+          monthlyAmount: String(loanData.monthlyAmount),
+          numberOfMonths: loanData.numberOfMonths,
+          startDate: loanData.startDate,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(loans.id, loanId), eq(loans.customerId, customerId)));
+
+      await tx
+        .update(collectionCycles)
+        .set({ expectedAmount: String(loanData.monthlyAmount), updatedAt: new Date() })
+        .where(
+          and(
+            eq(collectionCycles.loanId, loanId),
+            inArray(collectionCycles.status, ["unpaid", "partial"]),
+          ),
+        );
+    }
+  });
 
   revalidatePath("/customers");
+  revalidatePath("/dashboard");
   revalidatePath(`/customers/${customerId}`);
+  return {};
 }
 
 /**
@@ -324,12 +405,13 @@ export async function createReLoan(
 }
 
 /**
- * Manually closes an active loan: records a final outstanding amount (the
- * owner's call — editable away from the computed balance, e.g. to write
- * off a small remainder) and a 1-5 rating of how the customer performed
- * on this loan. Never touches payments/cycles history — closing is a
- * status + record change, not a data deletion. Re-loan becomes available
- * once a loan is completed.
+ * Manually closes an active loan: records a 1-5 rating of how the customer
+ * performed on this loan. Refused while there's still a pending outstanding
+ * balance — the owner can correct the shown outstanding amount if it's
+ * computed wrong, but can't close a loan that still has money owed on it.
+ * Never touches payments/cycles history — closing is a status + record
+ * change, not a data deletion. Re-loan becomes available once a loan is
+ * completed.
  *
  * Returns `{ error }` instead of throwing for expected failures — Next.js
  * strips thrown Server Action error messages in production builds (they
@@ -352,6 +434,12 @@ export async function closeLoan(
     return { error: parsed.error.issues.map((i) => i.message).join(", ") };
   }
   const data = parsed.data;
+
+  if (data.finalOutstandingAmount > 0) {
+    return {
+      error: `This loan still has a pending amount of ${formatCurrency(data.finalOutstandingAmount)} — collect it before completing the loan.`,
+    };
+  }
 
   const [loan] = await db
     .select({ id: loans.id, customerId: loans.customerId, businessId: customers.businessId })
