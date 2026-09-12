@@ -118,6 +118,41 @@ export async function getReportPayments(
     .orderBy(desc(payments.paymentDate));
 }
 
+/**
+ * Money the business paid OUT — loan principal disbursed to customers,
+ * dated by the loan's start date. This is the "debit" side of the ledger;
+ * getReportPayments (customer payments received) is the "credit" side.
+ */
+export async function getReportDisbursements(
+  businessId: string,
+  from: string,
+  to: string,
+  filters: { routeId?: string } = {},
+) {
+  const conditions: SQL[] = [
+    eq(customers.businessId, businessId),
+    between(loans.startDate, from, to),
+  ];
+  if (filters.routeId) conditions.push(eq(customers.routeId, filters.routeId));
+
+  return db
+    .select({
+      loanId: loans.id,
+      customerName: customers.name,
+      routeName: routes.name,
+      principalAmount: loans.principalAmount,
+      interestAmount: loans.interestAmount,
+      totalPayableAmount: loans.totalPayableAmount,
+      numberOfMonths: loans.numberOfMonths,
+      startDate: loans.startDate,
+    })
+    .from(loans)
+    .innerJoin(customers, eq(loans.customerId, customers.id))
+    .leftJoin(routes, eq(customers.routeId, routes.id))
+    .where(and(...conditions))
+    .orderBy(desc(loans.startDate));
+}
+
 /** Every loan (original + re-loans), with collected-to-date and balance computed from its cycles. */
 export async function getReportLoans(businessId: string, filters: { status?: "active" | "completed" } = {}) {
   const conditions: SQL[] = [eq(customers.businessId, businessId)];

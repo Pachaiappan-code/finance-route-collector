@@ -1,6 +1,7 @@
 import { Download } from "lucide-react";
 import { auth } from "@/lib/auth/config";
 import {
+  getReportDisbursements,
   getReportLoans,
   getReportPayments,
   getReportRouteBreakdown,
@@ -43,13 +44,17 @@ export default async function ReportsPage({
   const status = (sp.status as "paid" | "partial" | "unpaid" | undefined) || undefined;
   const method = (sp.method as "cash" | "gpay" | undefined) || undefined;
 
-  const [routesList, summary, byRoute, paymentRows, loanRows] = await Promise.all([
+  const [routesList, summary, byRoute, paymentRows, loanRows, disbursementRows] = await Promise.all([
     listActiveRoutesForSelect(businessId),
     getReportSummary(businessId, from, to, { routeId, status }),
     getReportRouteBreakdown(businessId, from, to),
     getReportPayments(businessId, from, to, { routeId, paymentMethod: method }),
     getReportLoans(businessId),
+    getReportDisbursements(businessId, from, to, { routeId }),
   ]);
+
+  const totalCredited = paymentRows.reduce((sum, p) => sum + Number(p.amount), 0);
+  const totalDebited = disbursementRows.reduce((sum, l) => sum + Number(l.principalAmount), 0);
 
   const exportParams = new URLSearchParams();
   exportParams.set("from", from);
@@ -127,6 +132,26 @@ export default async function ReportsPage({
 
       <section>
         <h2 className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
+          Credit &amp; debit — {formatDisplayDate(from)} to {formatDisplayDate(to)}
+        </h2>
+        <div className="grid grid-cols-2 gap-3">
+          <ReportCard label="Credited (received)" value={formatCurrency(totalCredited)} accent="success" />
+          <ReportCard label="Debited (loans given)" value={formatCurrency(totalDebited)} accent="danger" />
+        </div>
+        <div className="mt-2 rounded-2xl border border-border bg-surface p-4">
+          <p className="text-xs text-muted">Net (credit − debit)</p>
+          <p
+            className={`mt-0.5 text-lg font-semibold ${
+              totalCredited - totalDebited >= 0 ? "text-success" : "text-danger"
+            }`}
+          >
+            {formatCurrency(totalCredited - totalDebited)}
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
           By route
         </h2>
         <div className="flex flex-col gap-2">
@@ -152,7 +177,7 @@ export default async function ReportsPage({
 
       <section>
         <h2 className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
-          Payments ({paymentRows.length})
+          Payments received — Credit ({paymentRows.length})
         </h2>
         <div className="flex flex-col gap-2">
           {paymentRows.length === 0 && (
@@ -171,12 +196,43 @@ export default async function ReportsPage({
                   {p.notes ? ` · ${p.notes}` : ""}
                 </p>
               </div>
-              <p className="font-semibold text-success">{formatCurrency(Number(p.amount))}</p>
+              <p className="font-semibold text-success">+{formatCurrency(Number(p.amount))}</p>
             </div>
           ))}
           {paymentRows.length > 50 && (
             <p className="text-xs text-muted">
               Showing the first 50 of {paymentRows.length} — use CSV export for the full list.
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
+          Loans given — Debit ({disbursementRows.length})
+        </h2>
+        <div className="flex flex-col gap-2">
+          {disbursementRows.length === 0 && (
+            <p className="text-sm text-muted">No loans given in this range.</p>
+          )}
+          {disbursementRows.slice(0, 50).map((l) => (
+            <div
+              key={l.loanId}
+              className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-sm"
+            >
+              <div>
+                <p className="font-medium text-foreground">{l.customerName}</p>
+                <p className="text-xs text-muted">
+                  {l.routeName ?? "—"} · {formatDisplayDate(l.startDate)}
+                  {l.numberOfMonths && <> · {l.numberOfMonths} months</>}
+                </p>
+              </div>
+              <p className="font-semibold text-danger">−{formatCurrency(Number(l.principalAmount))}</p>
+            </div>
+          ))}
+          {disbursementRows.length > 50 && (
+            <p className="text-xs text-muted">
+              Showing the first 50 of {disbursementRows.length} — use CSV export for the full list.
             </p>
           )}
         </div>
@@ -228,6 +284,7 @@ export default async function ReportsPage({
           {[
             ["Customers", "/api/export/customers"],
             ["Payments", `/api/export/payments?${exportParams.toString()}`],
+            ["Loans given", `/api/export/loans-given?${exportParams.toString()}`],
             ["Collections", "/api/export/collections"],
             ["Due", "/api/export/due"],
           ].map(([label, href]) => (
@@ -252,10 +309,10 @@ function ReportCard({
 }: {
   label: string;
   value: string;
-  accent?: "success" | "warning" | "info";
+  accent?: "success" | "warning" | "info" | "danger";
 }) {
   const accentClass = accent
-    ? { success: "text-success", warning: "text-warning", info: "text-info" }[accent]
+    ? { success: "text-success", warning: "text-warning", info: "text-info", danger: "text-danger" }[accent]
     : "text-foreground";
   return (
     <div className="rounded-2xl border border-border bg-surface p-4">
